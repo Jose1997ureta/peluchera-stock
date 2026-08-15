@@ -66,6 +66,7 @@ export function AppLayout() {
       <AnimatedSidebar ariaLabel="Navegación principal" collapsible="icon">
         <AnimatedSidebarHeader className="p-3 pb-2">
           <div className="flex min-h-11 items-center gap-2 overflow-hidden px-2">
+            <img src="/icons/icon-192.png" alt="" className="size-6 shrink-0 rounded-md" />
             <span className="truncate text-sm font-semibold text-foreground group-data-[state=collapsed]/sidebar:hidden">
               Peluchera Stock
             </span>
