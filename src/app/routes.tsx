@@ -14,6 +14,13 @@ import { AuthGuard } from './AuthGuard'
 // se evalúa al entrar a "/", sin romper el resto de la app (ej. /login) mientras no haya .env.
 const DashboardPage = lazy(() => import('../features/dashboard/components/DashboardPage'))
 
+const dashboardErrorElement = (
+  <p className="text-sm text-destructive">
+    No se pudo cargar el dashboard. Revisá que las variables de entorno de Supabase
+    (VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY) estén configuradas.
+  </p>
+)
+
 // Rutas placeholder: cada página real se implementará a partir de su spec
 // en spec/<feature>/. No agregar lógica de negocio aquí salvo lo ya definido
 // en spec/auth/login-feature.md y spec/dashboard/dashboard-feature.md
@@ -42,12 +49,16 @@ export const router = createBrowserRouter([
             <DashboardPage />
           </Suspense>
         ),
-        errorElement: (
-          <p className="text-sm text-destructive">
-            No se pudo cargar el dashboard. Revisá que las variables de entorno de Supabase
-            (VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY) estén configuradas.
-          </p>
+        errorElement: dashboardErrorElement,
+      },
+      {
+        path: 'dashboard',
+        element: (
+          <Suspense fallback={null}>
+            <DashboardPage />
+          </Suspense>
         ),
+        errorElement: dashboardErrorElement,
       },
       { path: 'productos', element: <ProductsPage /> },
       { path: 'actividades', element: <ActivitiesPage /> },
