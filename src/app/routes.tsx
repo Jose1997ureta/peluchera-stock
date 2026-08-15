@@ -8,6 +8,7 @@ import ProductsPage from '../features/products/components/ProductsPage'
 import ProfilePage from '../features/profile/components/ProfilePage'
 import { AppLayout } from './AppLayout'
 import { AuthGuard } from './AuthGuard'
+import { GuestGuard } from './GuestGuard'
 
 // Carga diferida: DashboardPage importa el cliente de Supabase (src/shared/lib/supabase.ts),
 // que revienta en el import si faltan las variables de entorno. Con lazy(), ese import solo
@@ -28,11 +29,19 @@ const dashboardErrorElement = (
 export const router = createBrowserRouter([
   {
     path: '/login',
-    element: <LoginPage />,
+    element: (
+      <GuestGuard>
+        <LoginPage />
+      </GuestGuard>
+    ),
   },
   {
     path: '/register',
-    element: <RegisterPage />,
+    element: (
+      <GuestGuard>
+        <RegisterPage />
+      </GuestGuard>
+    ),
   },
   {
     path: '/',
