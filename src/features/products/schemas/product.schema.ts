@@ -5,7 +5,6 @@ export const PRODUCT_IMAGE_ACCEPTED_TYPES = ['image/jpeg', 'image/png', 'image/w
 
 export interface ProductFormValues {
   name: string
-  description: string
   price: string
   stock: string
   image: File | null
@@ -14,7 +13,6 @@ export interface ProductFormValues {
 
 export const productInitialValues: ProductFormValues = {
   name: '',
-  description: '',
   price: '',
   stock: '',
   image: null,
@@ -23,7 +21,6 @@ export const productInitialValues: ProductFormValues = {
 
 export const productSchema = yup.object({
   name: yup.string().trim().required(),
-  description: yup.string().trim(),
   price: yup.number().typeError('').required().moreThan(0),
   stock: yup.number().typeError('').integer().required().min(1),
   image: yup

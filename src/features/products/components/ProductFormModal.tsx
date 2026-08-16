@@ -7,7 +7,6 @@ import {
 import { Button } from '@/shared/components/ui/button'
 import { Input } from '@/shared/components/ui/input'
 import { Label } from '@/shared/components/ui/label'
-import { Textarea } from '@/shared/components/ui/textarea'
 import type { Product } from '@/shared/types/product'
 import { useCreateProduct } from '../hooks/useCreateProduct'
 import { useUpdateProduct } from '../hooks/useUpdateProduct'
@@ -22,7 +21,6 @@ import { toast } from '@/shared/lib/toast'
 function productToFormValues(product: Product): ProductFormValues {
   return {
     name: product.name,
-    description: product.description,
     price: String(product.price),
     stock: String(product.stock),
     image: null,
@@ -49,7 +47,6 @@ export function ProductFormModal({ open, onOpenChange, product }: ProductFormMod
     onSubmit: async (values, { setSubmitting, resetForm }) => {
       const input = {
         name: values.name.trim(),
-        description: values.description.trim(),
         price: Number(values.price),
         stock: Number(values.stock),
         image: values.image,
@@ -116,17 +113,6 @@ export function ProductFormModal({ open, onOpenChange, product }: ProductFormMod
                 onChange={formik.handleChange}
                 onBlur={formik.handleBlur}
                 aria-invalid={Boolean(formik.touched.name && formik.errors.name)}
-              />
-            </div>
-
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="description">Descripción</Label>
-              <Textarea
-                id="description"
-                name="description"
-                value={formik.values.description}
-                onChange={formik.handleChange}
-                onBlur={formik.handleBlur}
               />
             </div>
 

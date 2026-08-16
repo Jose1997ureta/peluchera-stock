@@ -36,7 +36,8 @@ No introducir Redux, MobX, Next.js, ni otra librería de UI (MUI, Chakra, Ant) �
 ### Entidades
 
 **`products`**
-- `id`, `name`, `description`, `price` (numeric), `stock` (int), `image_url`, `is_active` (boolean, default `true`), `created_at`, `updated_at`.
+- `id`, `name`, `price` (numeric), `stock` (int), `image_url`, `is_active` (boolean, default `true`), `created_at`, `updated_at`.
+- No tiene campo `description` — se sacó a pedido del usuario, no reintroducirlo sin que lo pida explícitamente.
 - `is_active = false` es un producto **desactivado**: no aparece en el listado principal ni en las métricas de stock bajo del dashboard, pero sigue existiendo (no es un borrado). Se puede reactivar en cualquier momento. Ver `spec/products/products-feature.md`.
 
 **`zonas`**

@@ -204,18 +204,8 @@ export function ProductsTabPanel({
         key: 'name',
         header: 'Nombre',
         sortable: true,
-        width: '220px',
         cell: (row) => (
           <span className="font-medium text-foreground">{row.name}</span>
-        ),
-      },
-      {
-        key: 'description',
-        header: 'Descripción',
-        cell: (row) => (
-          <span className="line-clamp-2 text-muted-foreground">
-            {row.description || '—'}
-          </span>
         ),
       },
       {

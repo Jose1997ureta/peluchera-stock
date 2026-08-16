@@ -45,6 +45,21 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined)
 
+function getAvatarPath(avatarUrl: string): string | null {
+  const marker = `/${AVATARS_BUCKET}/`
+  const index = avatarUrl.indexOf(marker)
+  if (index === -1) return null
+  return avatarUrl.slice(index + marker.length)
+}
+
+async function removeAvatarImage(avatarUrl: string): Promise<void> {
+  const path = getAvatarPath(avatarUrl)
+  if (!path) return
+
+  const { error } = await supabase.storage.from(AVATARS_BUCKET).remove([path])
+  if (error) console.error('Failed to remove avatar image from storage', error)
+}
+
 async function fetchAuthUser(supabaseUser: User): Promise<AuthUser> {
   const { data, error } = await supabase
     .from('profiles')
@@ -151,6 +166,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   async function updateAvatar(file: File): Promise<void> {
     if (!user) return
 
+    const previousAvatarUrl = user.avatarUrl
+
     const compressed = await compressImage(file, { maxDimension: AVATAR_MAX_DIMENSION })
     const path = `${user.id}/${crypto.randomUUID()}.webp`
 
@@ -169,6 +186,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (error) throw error
 
     setUser({ ...user, avatarUrl: publicUrlData.publicUrl })
+
+    if (previousAvatarUrl && previousAvatarUrl !== publicUrlData.publicUrl) {
+      await removeAvatarImage(previousAvatarUrl)
+    }
   }
 
   return (

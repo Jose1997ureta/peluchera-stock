@@ -25,7 +25,6 @@ export interface FetchProductsResult {
 
 export interface ProductInput {
   name: string
-  description: string
   price: number
   stock: number
   image: File | null
@@ -38,7 +37,6 @@ function toProduct(row: ProductRow): Product {
   return {
     id: row.id,
     name: row.name,
-    description: row.description ?? '',
     price: row.price,
     stock: row.stock,
     imageUrl: row.image_url,
@@ -57,6 +55,24 @@ async function uploadProductImage(file: File): Promise<string> {
 
   const { data } = supabase.storage.from(PRODUCT_IMAGES_BUCKET).getPublicUrl(path)
   return data.publicUrl
+}
+
+function getProductImagePath(imageUrl: string | null): string | null {
+  if (!imageUrl) return null
+  const marker = `/${PRODUCT_IMAGES_BUCKET}/`
+  const index = imageUrl.indexOf(marker)
+  if (index === -1) return null
+  return imageUrl.slice(index + marker.length)
+}
+
+async function removeProductImages(imageUrls: Array<string | null>): Promise<void> {
+  const paths = imageUrls
+    .map(getProductImagePath)
+    .filter((path): path is string => path !== null)
+  if (paths.length === 0) return
+
+  const { error } = await supabase.storage.from(PRODUCT_IMAGES_BUCKET).remove(paths)
+  if (error) console.error('Failed to remove product image(s) from storage', error)
 }
 
 export async function fetchProducts(params: FetchProductsParams): Promise<FetchProductsResult> {
@@ -88,7 +104,6 @@ export async function createProduct(input: ProductInput): Promise<Product> {
     .from('products')
     .insert({
       name: input.name,
-      description: input.description || null,
       price: input.price,
       stock: input.stock,
       image_url: imageUrl,
@@ -107,7 +122,6 @@ export async function updateProduct(id: string, input: ProductInput): Promise<Pr
     .from('products')
     .update({
       name: input.name,
-      description: input.description || null,
       price: input.price,
       stock: input.stock,
       image_url: imageUrl,
@@ -117,17 +131,30 @@ export async function updateProduct(id: string, input: ProductInput): Promise<Pr
     .single()
 
   if (error) throw error
+
+  if (input.image && input.existingImageUrl && input.existingImageUrl !== imageUrl) {
+    await removeProductImages([input.existingImageUrl])
+  }
+
   return toProduct(data)
 }
 
 export async function deleteProduct(id: string): Promise<void> {
+  const { data: product } = await supabase.from('products').select('image_url').eq('id', id).single()
+
   const { error } = await supabase.from('products').delete().eq('id', id)
   if (error) throw error
+
+  if (product) await removeProductImages([product.image_url])
 }
 
 export async function bulkDeleteProducts(ids: string[]): Promise<void> {
+  const { data: products } = await supabase.from('products').select('image_url').in('id', ids)
+
   const { error } = await supabase.from('products').delete().in('id', ids)
   if (error) throw error
+
+  if (products) await removeProductImages(products.map((product) => product.image_url))
 }
 
 export async function setProductActive(id: string, isActive: boolean): Promise<void> {

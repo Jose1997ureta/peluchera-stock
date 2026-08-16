@@ -58,7 +58,6 @@ function toProduct(row: ProductRow): Product {
   return {
     id: row.id,
     name: row.name,
-    description: row.description ?? '',
     price: row.price,
     stock: row.stock,
     imageUrl: row.image_url,
