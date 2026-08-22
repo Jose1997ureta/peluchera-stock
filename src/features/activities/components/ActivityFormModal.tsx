@@ -1,6 +1,6 @@
 import { useFormik } from 'formik'
-import { Trash2 } from 'lucide-react'
-import { useEffect, useMemo } from 'react'
+import { Search, Trash2, X } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   CenterMorphModal,
   CenterMorphModalContent,
@@ -38,7 +38,7 @@ const ROW_HEIGHT = 56
 const HEADER_HEIGHT = 44
 const MAX_VISIBLE_ROWS = 6
 
-export type ActivityFormModalMode = 'create' | 'edit' | 'view'
+export type ActivityFormModalMode = 'create' | 'edit'
 
 function buildLineValues(
   activity: Activity,
@@ -55,7 +55,6 @@ function buildLineValues(
       // para saber cuánto se puede subir la cantidad sin exceder el stock real disponible.
       maxQty: (product?.stock ?? 0) + line.initialQty,
       initialQty: String(line.initialQty),
-      soldQty: line.soldQty,
     }
   })
 }
@@ -73,11 +72,11 @@ export function ActivityFormModal({
   activity,
   mode,
 }: ActivityFormModalProps) {
-  const isViewOnly = mode === 'view'
   const isEditing = mode === 'edit'
   const createActivity = useCreateActivity()
   const updateActivity = useUpdateActivity()
   const { data: zonas } = useZonas()
+  const [search, setSearch] = useState('')
 
   const lineProductIds = useMemo(
     () => activity?.products.map((line) => line.productId) ?? [],
@@ -89,8 +88,7 @@ export function ActivityFormModal({
     () => new Map((lineProducts ?? []).map((product) => [product.id, product])),
     [lineProducts],
   )
-  const isReady =
-    mode === 'create' || lineProductIds.length === 0 || !isLoadingLines
+  const isReady = lineProductIds.length === 0 || !isLoadingLines
 
   const formik = useFormik<ActivityFormValues>({
     initialValues:
@@ -135,9 +133,20 @@ export function ActivityFormModal({
   })
 
   useEffect(() => {
-    if (!open) formik.resetForm()
+    if (!open) {
+      formik.resetForm()
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- clear the search box when the modal closes, not an external sync
+      setSearch('')
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- reset only when the modal closes, not on every formik identity change
   }, [open])
+
+  const normalizedSearch = search.trim().toLowerCase()
+  const filteredProducts = normalizedSearch
+    ? formik.values.products.filter((line) =>
+        line.productName.toLowerCase().includes(normalizedSearch),
+      )
+    : formik.values.products
 
   const selectedProductIds = formik.values.products.map(
     (line) => line.productId,
@@ -146,12 +155,6 @@ export function ActivityFormModal({
     (sum, line) => sum + line.unitPrice * (Number(line.initialQty) || 0),
     0,
   )
-  const investedTotal = formik.values.products.reduce(
-    (sum, line) => sum + line.unitPrice * (line.soldQty ?? 0),
-    0,
-  )
-  const revenueTotal = activity?.revenue ?? 0
-  const realTotal = revenueTotal - investedTotal
 
   function handleSelectProduct(product: Product) {
     const next: ActivityLineFormValues = {
@@ -235,8 +238,7 @@ export function ActivityFormModal({
                 {row.productName}
               </span>
               <span className="truncate text-xs text-muted-foreground">
-                {formatCurrency(row.unitPrice)} c/u
-                {isViewOnly ? '' : ` · Máx: ${row.maxQty}`}
+                {formatCurrency(row.unitPrice)} c/u · Máx: {row.maxQty}
               </span>
             </div>
           </div>
@@ -244,13 +246,10 @@ export function ActivityFormModal({
       },
       {
         key: 'initialQty',
-        header: isViewOnly ? 'Reservado' : 'Cantidad',
+        header: 'Cantidad',
         align: 'right',
-        width: isViewOnly ? '96px' : '110px',
+        width: '110px',
         cell: (row) => {
-          if (isViewOnly) {
-            return <span className="tabular-nums">{row.initialQty}</span>
-          }
           const index = formik.values.products.findIndex(
             (line) => line.productId === row.productId,
           )
@@ -282,21 +281,11 @@ export function ActivityFormModal({
       },
     ]
 
-    if (isViewOnly) {
-      cols.push({
-        key: 'soldQty',
-        header: 'Vendido',
-        align: 'right',
-        width: '88px',
-        cell: (row) => <span className="tabular-nums">{row.soldQty ?? 0}</span>,
-      })
-    }
-
     cols.push({
       key: 'subtotal',
       header: 'Subtotal venta',
       align: 'right',
-      width: isViewOnly ? '110px' : '120px',
+      width: '120px',
       cell: (row) => (
         <span className="tabular-nums">
           {formatCurrency(row.unitPrice * (Number(row.initialQty) || 0))}
@@ -304,36 +293,34 @@ export function ActivityFormModal({
       ),
     })
 
-    if (!isViewOnly) {
-      cols.push({
-        key: 'actions',
-        header: 'Acción',
-        align: 'right',
-        width: '96px',
-        cell: (row) => {
-          const index = formik.values.products.findIndex(
-            (line) => line.productId === row.productId,
-          )
-          return (
-            <Button
-              type="button"
-              size="icon"
-              variant="ghost"
-              aria-label="Quitar producto"
-              onClick={() => handleRemoveLine(index)}
-            >
-              <Trash2 className="size-4" />
-            </Button>
-          )
-        },
-      })
-    }
+    cols.push({
+      key: 'actions',
+      header: 'Acción',
+      align: 'right',
+      width: '96px',
+      cell: (row) => {
+        const index = formik.values.products.findIndex(
+          (line) => line.productId === row.productId,
+        )
+        return (
+          <Button
+            type="button"
+            size="icon"
+            variant="ghost"
+            aria-label="Quitar producto"
+            onClick={() => handleRemoveLine(index)}
+          >
+            <Trash2 className="size-4" />
+          </Button>
+        )
+      },
+    })
 
     return cols
   }
 
   const columns = buildColumns()
-  const rowCount = formik.values.products.length
+  const rowCount = filteredProducts.length
   const tableHeight =
     Math.min(Math.max(rowCount, 1), MAX_VISIBLE_ROWS) * ROW_HEIGHT +
     HEADER_HEIGHT
@@ -341,13 +328,7 @@ export function ActivityFormModal({
   return (
     <CenterMorphModal open={open} onOpenChange={onOpenChange}>
       <CenterMorphModalContent
-        ariaLabel={
-          mode === 'create'
-            ? 'Crear actividad'
-            : mode === 'edit'
-              ? 'Editar actividad'
-              : 'Ver actividad'
-        }
+        ariaLabel={isEditing ? 'Editar actividad' : 'Crear actividad'}
         dismissible={!formik.isSubmitting}
         className="max-w-5xl xl:max-w-6xl"
       >
@@ -357,11 +338,7 @@ export function ActivityFormModal({
           className="flex max-h-[85vh] flex-col p-6"
         >
           <h2 className="text-lg font-semibold text-foreground">
-            {mode === 'create'
-              ? 'Crear actividad'
-              : mode === 'edit'
-                ? 'Editar actividad'
-                : 'Ver actividad'}
+            {isEditing ? 'Editar actividad' : 'Crear actividad'}
           </h2>
 
           <div className="-mx-1 mt-4 grid grid-cols-1 gap-6 overflow-y-auto p-1 md:grid-cols-7 md:gap-8">
@@ -374,7 +351,6 @@ export function ActivityFormModal({
                   value={formik.values.name}
                   onChange={formik.handleChange}
                   onBlur={formik.handleBlur}
-                  disabled={isViewOnly}
                   aria-invalid={Boolean(
                     formik.touched.name && formik.errors.name,
                   )}
@@ -386,7 +362,6 @@ export function ActivityFormModal({
                 <Select
                   value={formik.values.zonaId}
                   onValueChange={(value) => formik.setFieldValue('zonaId', value)}
-                  disabled={isViewOnly}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Elegí una zona" />
@@ -405,12 +380,32 @@ export function ActivityFormModal({
             <div className="flex flex-col gap-2 md:col-span-5">
               <Label>Productos</Label>
 
-              {isViewOnly ? null : (
-                <ProductPicker
-                  excludeProductIds={selectedProductIds}
-                  onSelect={handleSelectProduct}
-                />
-              )}
+              <ProductPicker
+                excludeProductIds={selectedProductIds}
+                onSelect={handleSelectProduct}
+              />
+
+              {formik.values.products.length > 0 ? (
+                <div className="relative w-full sm:max-w-xs">
+                  <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    value={search}
+                    onChange={(event) => setSearch(event.target.value)}
+                    placeholder="Filtrar productos agregados..."
+                    className="pl-8 pr-8"
+                  />
+                  {search ? (
+                    <button
+                      type="button"
+                      aria-label="Limpiar filtro"
+                      onClick={() => setSearch('')}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                    >
+                      <X className="size-4" />
+                    </button>
+                  ) : null}
+                </div>
+              ) : null}
 
               {isLoadingLines ? (
                 <p className="text-sm text-muted-foreground">
@@ -428,11 +423,15 @@ export function ActivityFormModal({
                     ? productsListError
                     : 'Sin productos agregados todavía. Buscá uno arriba para agregarlo.'}
                 </p>
+              ) : filteredProducts.length === 0 ? (
+                <p className="p-6 text-center text-sm text-muted-foreground">
+                  Ningún producto agregado coincide con la búsqueda.
+                </p>
               ) : (
                 <>
                   {/* Mobile: cards apiladas. Desktop (md+): tabla. */}
                   <div className="flex flex-col gap-3 md:hidden">
-                    {formik.values.products.map((row) => {
+                    {filteredProducts.map((row) => {
                       const index = formik.values.products.findIndex(
                         (line) => line.productId === row.productId,
                       )
@@ -455,65 +454,43 @@ export function ActivityFormModal({
                                     {row.productName}
                                   </span>
                                   <span className="truncate text-xs text-muted-foreground">
-                                    {formatCurrency(row.unitPrice)} c/u
-                                    {isViewOnly ? '' : ` · Máx: ${row.maxQty}`}
+                                    {formatCurrency(row.unitPrice)} c/u · Máx:{' '}
+                                    {row.maxQty}
                                   </span>
                                 </div>
                               </div>
-                              {isViewOnly ? null : (
-                                <Button
-                                  type="button"
-                                  size="icon"
-                                  variant="ghost"
-                                  aria-label="Quitar producto"
-                                  onClick={() => handleRemoveLine(index)}
-                                >
-                                  <Trash2 className="size-4" />
-                                </Button>
-                              )}
+                              <Button
+                                type="button"
+                                size="icon"
+                                variant="ghost"
+                                aria-label="Quitar producto"
+                                onClick={() => handleRemoveLine(index)}
+                              >
+                                <Trash2 className="size-4" />
+                              </Button>
                             </div>
 
                             <div className="grid grid-cols-2 items-center gap-x-3 gap-y-2 text-sm">
-                              {isViewOnly ? (
-                                <>
-                                  <span className="text-muted-foreground">
-                                    Reservado
-                                  </span>
-                                  <span className="text-right tabular-nums">
-                                    {row.initialQty}
-                                  </span>
-
-                                  <span className="text-muted-foreground">
-                                    Vendido
-                                  </span>
-                                  <span className="text-right tabular-nums">
-                                    {row.soldQty ?? 0}
-                                  </span>
-                                </>
-                              ) : (
-                                <>
-                                  <Label
-                                    htmlFor={`qty-mobile-${row.productId}`}
-                                    className="text-muted-foreground"
-                                  >
-                                    Cantidad
-                                  </Label>
-                                  <Input
-                                    id={`qty-mobile-${row.productId}`}
-                                    type="number"
-                                    step="1"
-                                    min="1"
-                                    max={row.maxQty}
-                                    value={row.initialQty}
-                                    onChange={(event) =>
-                                      handleQtyChange(index, event.target.value)
-                                    }
-                                    onBlur={() => handleQtyBlur(row)}
-                                    aria-invalid={qtyError !== undefined}
-                                    className="ml-auto w-20 px-1.5 text-right"
-                                  />
-                                </>
-                              )}
+                              <Label
+                                htmlFor={`qty-mobile-${row.productId}`}
+                                className="text-muted-foreground"
+                              >
+                                Cantidad
+                              </Label>
+                              <Input
+                                id={`qty-mobile-${row.productId}`}
+                                type="number"
+                                step="1"
+                                min="1"
+                                max={row.maxQty}
+                                value={row.initialQty}
+                                onChange={(event) =>
+                                  handleQtyChange(index, event.target.value)
+                                }
+                                onBlur={() => handleQtyBlur(row)}
+                                aria-invalid={qtyError !== undefined}
+                                className="ml-auto w-20 px-1.5 text-right"
+                              />
 
                               <span className="text-muted-foreground">
                                 Subtotal venta
@@ -532,7 +509,7 @@ export function ActivityFormModal({
 
                   <div className="hidden md:block">
                     <Table
-                      data={formik.values.products}
+                      data={filteredProducts}
                       columns={columns}
                       getRowId={(row) => row.productId}
                       rowHeight={ROW_HEIGHT}
@@ -545,79 +522,31 @@ export function ActivityFormModal({
 
               {formik.values.products.length > 0 ? (
                 <div className="flex flex-col gap-1 rounded-lg bg-muted px-3 py-2.5">
-                  {isViewOnly ? (
-                    <>
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm font-medium text-foreground">
-                          Ingreso
-                        </span>
-                        <span className="text-sm font-semibold tabular-nums text-foreground">
-                          {formatCurrency(revenueTotal)}
-                        </span>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm font-medium text-foreground">
-                          Monto de la inversión
-                        </span>
-                        <span className="text-sm font-semibold tabular-nums text-foreground">
-                          {formatCurrency(investedTotal)}
-                        </span>
-                      </div>
-                      <div className="mt-1 flex items-center justify-between border-t border-border pt-2">
-                        <span className="text-base font-semibold text-foreground">
-                          Monto real
-                        </span>
-                        <span
-                          className={`text-lg font-bold tabular-nums ${
-                            realTotal >= 0 ? 'text-emerald-600' : 'text-destructive'
-                          }`}
-                        >
-                          {formatCurrency(realTotal)}
-                        </span>
-                      </div>
-                    </>
-                  ) : (
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm font-medium text-foreground">
-                        Monto estimado de venta
-                      </span>
-                      <span className="text-sm font-semibold tabular-nums text-foreground">
-                        {formatCurrency(estimatedTotal)}
-                      </span>
-                    </div>
-                  )}
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-medium text-foreground">
+                      Monto estimado de venta
+                    </span>
+                    <span className="text-sm font-semibold tabular-nums text-foreground">
+                      {formatCurrency(estimatedTotal)}
+                    </span>
+                  </div>
                 </div>
               ) : null}
             </div>
           </div>
 
           <div className="mt-6 flex justify-end gap-2">
-            {isViewOnly ? (
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => onOpenChange(false)}
-              >
-                Cerrar
-              </Button>
-            ) : (
-              <>
-                <Button
-                  type="button"
-                  variant="outline"
-                  disabled={formik.isSubmitting}
-                  onClick={() => onOpenChange(false)}
-                >
-                  Cancelar
-                </Button>
-                <Button
-                  type="submit"
-                  disabled={formik.isSubmitting || isLoadingLines}
-                >
-                  {isEditing ? 'Guardar cambios' : 'Registrar'}
-                </Button>
-              </>
-            )}
+            <Button
+              type="button"
+              variant="outline"
+              disabled={formik.isSubmitting}
+              onClick={() => onOpenChange(false)}
+            >
+              Cancelar
+            </Button>
+            <Button type="submit" disabled={formik.isSubmitting || isLoadingLines}>
+              {isEditing ? 'Guardar cambios' : 'Registrar'}
+            </Button>
           </div>
         </form>
       </CenterMorphModalContent>

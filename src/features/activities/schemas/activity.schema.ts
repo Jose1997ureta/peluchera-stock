@@ -8,8 +8,6 @@ export interface ActivityLineFormValues {
   /** Stock máximo disponible para esta línea al momento de agregarla/editarla (stock actual del producto + lo ya reservado por esta misma línea si se está editando). Snapshot tomado al agregar/abrir el formulario, no reactivo entre líneas. */
   maxQty: number
   initialQty: string
-  /** Cantidad ya vendida de esta línea — solo presente al ver/editar una actividad existente, se muestra en modo de solo lectura. */
-  soldQty?: number
 }
 
 export interface ActivityFormValues {

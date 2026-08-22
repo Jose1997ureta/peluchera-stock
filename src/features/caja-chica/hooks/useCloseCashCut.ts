@@ -1,11 +1,11 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { createCashCut } from './api'
+import { closeCashCut } from './api'
 
-export function useCreateCashCut() {
+export function useCloseCashCut() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: createCashCut,
+    mutationFn: closeCashCut,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['cash-cuts'] })
       queryClient.invalidateQueries({ queryKey: ['activities'] })

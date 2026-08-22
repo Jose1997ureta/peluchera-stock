@@ -1,6 +1,7 @@
 import { lazy, Suspense } from 'react'
 import { createBrowserRouter } from 'react-router-dom'
 import ActivitiesPage from '../features/activities/components/ActivitiesPage'
+import ForgotPasswordPage from '../features/auth/components/ForgotPasswordPage'
 import LoginPage from '../features/auth/components/LoginPage'
 import RegisterPage from '../features/auth/components/RegisterPage'
 import CajaChicaPage from '../features/caja-chica/components/CajaChicaPage'
@@ -40,6 +41,14 @@ export const router = createBrowserRouter([
     element: (
       <GuestGuard>
         <RegisterPage />
+      </GuestGuard>
+    ),
+  },
+  {
+    path: '/forget-password',
+    element: (
+      <GuestGuard>
+        <ForgotPasswordPage />
       </GuestGuard>
     ),
   },

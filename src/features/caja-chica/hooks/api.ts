@@ -2,12 +2,13 @@ import { supabase } from '@/shared/lib/supabase'
 import type { CashCut } from '@/shared/types/cashCut'
 import type { Tables } from '@/shared/types/supabase'
 
-export interface CurrentCut {
+export interface CurrentCashCut {
+  id: string
+  initialAmount: number
+  openedAt: string
   totalRevenue: number
   totalProfit: number
   activitiesCount: number
-  /** Actividad cerrada más antigua todavía pendiente de corte, o `null` si no hay ninguna — se usa como "desde cuándo" se viene acumulando. */
-  since: string | null
 }
 
 export interface HistoricalSummaryFilters {
@@ -26,20 +27,23 @@ export interface HistoricalSummary {
 
 type CashCutRow = Tables<'cash_cuts'>
 
-interface PendingActivityRow {
+interface ClosedActivityRow {
   closed_at: string | null
   revenue: number | null
   activity_products: { unit_price: number; sold_qty: number }[]
 }
 
 /** Valor a precio de catálogo de lo efectivamente vendido en una actividad — lo que se registra como "caja". */
-function subtotalRealOf(activity: PendingActivityRow): number {
+function subtotalRealOf(activity: ClosedActivityRow): number {
   return activity.activity_products.reduce((sum, line) => sum + line.unit_price * line.sold_qty, 0)
 }
 
 function toCashCut(row: CashCutRow): CashCut {
   return {
     id: row.id,
+    status: row.status as CashCut['status'],
+    initialAmount: row.initial_amount,
+    openedAt: row.opened_at ?? row.closed_at ?? '',
     closedAt: row.closed_at,
     totalRevenue: row.total_revenue,
     totalProfit: row.total_profit,
@@ -48,43 +52,49 @@ function toCashCut(row: CashCutRow): CashCut {
   }
 }
 
-async function fetchPendingClosedActivities(): Promise<PendingActivityRow[]> {
-  const { data, error } = await supabase
-    .from('activities')
-    .select('closed_at, revenue, activity_products(unit_price, sold_qty)')
-    .eq('status', 'closed')
-    .is('cut_id', null)
+/**
+ * Estado de la caja abierta actual, o `null` si no hay ninguna. A diferencia de un corte
+ * histórico, el subtotal real/ganancia se recalculan en vivo sobre las actividades ya
+ * atadas a esta caja (`cut_id`), porque todavía no se fijaron con "Cerrar caja".
+ */
+export async function fetchCurrentCashCut(): Promise<CurrentCashCut | null> {
+  const { data: cut, error } = await supabase
+    .from('cash_cuts')
+    .select('*')
+    .eq('status', 'open')
+    .maybeSingle()
 
   if (error) throw error
-  return (data ?? []) as unknown as PendingActivityRow[]
-}
+  if (!cut) return null
 
-export async function fetchCurrentCut(): Promise<CurrentCut> {
-  const pending = await fetchPendingClosedActivities()
+  const { data, error: activitiesError } = await supabase
+    .from('activities')
+    .select('closed_at, revenue, activity_products(unit_price, sold_qty)')
+    .eq('cut_id', cut.id)
 
-  const totalRevenue = pending.reduce((sum, activity) => sum + subtotalRealOf(activity), 0)
-  const totalProfit = pending.reduce(
+  if (activitiesError) throw activitiesError
+  const activities = (data ?? []) as unknown as ClosedActivityRow[]
+
+  const totalRevenue = activities.reduce((sum, activity) => sum + subtotalRealOf(activity), 0)
+  const totalProfit = activities.reduce(
     (sum, activity) => sum + ((activity.revenue ?? 0) - subtotalRealOf(activity)),
     0,
   )
-  const since = pending.reduce<string | null>((earliest, activity) => {
-    if (!activity.closed_at) return earliest
-    if (!earliest || activity.closed_at < earliest) return activity.closed_at
-    return earliest
-  }, null)
 
   return {
+    id: cut.id,
+    initialAmount: cut.initial_amount,
+    openedAt: cut.opened_at ?? '',
     totalRevenue,
     totalProfit,
-    activitiesCount: pending.length,
-    since,
+    activitiesCount: activities.length,
   }
 }
 
 /**
  * Resumen histórico de Inversión/Ganancia sobre TODAS las actividades cerradas (pertenezcan o no
- * ya a un corte pasado), filtrable por rango de fecha (`closed_at`) y/o zona — a diferencia de
- * "Corte actual", que solo mira las pendientes de corte (spec/caja-chica/caja-chica-feature.md).
+ * a una caja ya cerrada), filtrable por rango de fecha (`closed_at`) y/o zona — a diferencia de
+ * la caja actual, que solo mira las atadas a ella (spec/caja-chica/caja-chica-feature.md).
  */
 export async function fetchHistoricalSummary(
   filters: HistoricalSummaryFilters,
@@ -106,7 +116,7 @@ export async function fetchHistoricalSummary(
 
   const { data, error } = await query
   if (error) throw error
-  const activities = (data ?? []) as unknown as PendingActivityRow[]
+  const activities = (data ?? []) as unknown as ClosedActivityRow[]
 
   const totalInvested = activities.reduce((sum, activity) => sum + subtotalRealOf(activity), 0)
   const totalProfit = activities.reduce(
@@ -125,20 +135,27 @@ export async function fetchCashCuts(): Promise<CashCut[]> {
   const { data, error } = await supabase
     .from('cash_cuts')
     .select('*')
+    .eq('status', 'closed')
     .order('closed_at', { ascending: false })
 
   if (error) throw error
   return (data ?? []).map(toCashCut)
 }
 
+/** Abre una caja nueva con el monto inicial ingresado — falla si ya hay una caja abierta. */
+export async function openCashCut(initialAmount: number): Promise<void> {
+  const { error } = await supabase.rpc('open_cash_cut', { p_initial_amount: initialAmount })
+  if (error) throw error
+}
+
 /**
- * Ejecuta un corte (irreversible): archiva los totales acumulados de las actividades cerradas
- * pendientes como un registro histórico y las marca con el `cutId` del nuevo corte, para que
- * el acumulado actual vuelva a $0 (spec/caja-chica/caja-chica-feature.md). Corre atómicamente
- * en la función `create_cash_cut` de Postgres.
+ * Cierra la caja abierta actual (irreversible): fija el subtotal real y la ganancia
+ * acumulados por las actividades atadas a ella como un registro histórico. No recibe
+ * ningún monto de cierre — todo ya se calculó al ir cerrando actividades. Corre
+ * atómicamente en la función `close_cash_cut` de Postgres.
  */
-export async function createCashCut(): Promise<CashCut> {
-  const { data: cutId, error } = await supabase.rpc('create_cash_cut')
+export async function closeCashCut(): Promise<CashCut> {
+  const { data: cutId, error } = await supabase.rpc('close_cash_cut')
   if (error) throw error
 
   const { data, error: fetchError } = await supabase

@@ -8,12 +8,14 @@ import { useDeleteActivity } from '../hooks/useDeleteActivity'
 import { ActivitiesTabPanel } from './ActivitiesTabPanel'
 import { ActivityFillModal } from './ActivityFillModal'
 import { ActivityFormModal, type ActivityFormModalMode } from './ActivityFormModal'
+import { ActivityViewModal } from './ActivityViewModal'
 import { ConfirmDeleteActivityDialog } from './ConfirmDeleteActivityDialog'
 
 type FormModalState = { activity: Activity | null; mode: ActivityFormModalMode }
 
 export default function ActivitiesPage() {
   const [formModal, setFormModal] = useState<FormModalState | null>(null)
+  const [viewTarget, setViewTarget] = useState<Activity | null>(null)
   const [fillTarget, setFillTarget] = useState<Activity | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<Activity | null>(null)
 
@@ -50,7 +52,7 @@ export default function ActivitiesPage() {
           <ActivitiesTabPanel
             isOpenTab
             onEdit={(activity) => setFormModal({ activity, mode: 'edit' })}
-            onView={(activity) => setFormModal({ activity, mode: 'view' })}
+            onView={setViewTarget}
             onFill={setFillTarget}
             onRequestDelete={setDeleteTarget}
             onCreateActivity={() => setFormModal({ activity: null, mode: 'create' })}
@@ -60,7 +62,7 @@ export default function ActivitiesPage() {
           <ActivitiesTabPanel
             isOpenTab={false}
             onEdit={(activity) => setFormModal({ activity, mode: 'edit' })}
-            onView={(activity) => setFormModal({ activity, mode: 'view' })}
+            onView={setViewTarget}
             onFill={setFillTarget}
             onRequestDelete={setDeleteTarget}
             onCreateActivity={() => setFormModal({ activity: null, mode: 'create' })}
@@ -75,6 +77,14 @@ export default function ActivitiesPage() {
         }}
         activity={formModal?.activity ?? null}
         mode={formModal?.mode ?? 'create'}
+      />
+
+      <ActivityViewModal
+        open={viewTarget !== null}
+        onOpenChange={(open) => {
+          if (!open) setViewTarget(null)
+        }}
+        activity={viewTarget}
       />
 
       <ActivityFillModal

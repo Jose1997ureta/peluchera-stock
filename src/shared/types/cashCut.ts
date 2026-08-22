@@ -1,7 +1,10 @@
-/** Registro histórico de un corte de Caja Chica: archiva el período acumulado hasta ese momento. */
+/** Caja chica: se abre con un monto inicial, acumula sola y se cierra sin campos manuales. */
 export interface CashCut {
   id: string
-  closedAt: string
+  status: 'open' | 'closed'
+  initialAmount: number
+  openedAt: string
+  closedAt: string | null
   totalRevenue: number
   totalProfit: number
   activitiesCount: number

@@ -68,9 +68,12 @@ export default function LoginPage() {
             <div className="flex flex-col gap-1.5">
               <div className="flex items-center justify-between">
                 <Label htmlFor="password">Contraseña</Label>
-                <Button type="button" variant="link" size="sm" className="h-auto p-0 text-sm">
+                <Link
+                  to="/forget-password"
+                  className="text-sm text-primary underline-offset-4 hover:underline"
+                >
                   ¿Olvidaste tu contraseña?
-                </Button>
+                </Link>
               </div>
               <PasswordInput
                 id="password"

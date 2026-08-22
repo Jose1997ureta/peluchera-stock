@@ -48,7 +48,7 @@ const DEFAULT_SORT: SortState = { key: 'createdAt', direction: 'desc' }
 const MIN_NAME_WIDTH = 220
 /** Suma de los anchos fijos del resto de columnas (# + Zona + Productos + Monto est. + Monto real + Creada + Acciones). */
 function otherColumnsWidth(isOpenTab: boolean): number {
-  return 56 + 120 + 110 + 150 + 150 + 120 + (isOpenTab ? 150 : 110)
+  return 56 + 120 + 110 + 150 + 150 + 120 + (isOpenTab ? 190 : 110)
 }
 
 function estimatedAmount(activity: Activity): number {
@@ -145,6 +145,14 @@ export function ActivitiesTabPanel({
             <Button
               size="icon"
               variant="ghost"
+              aria-label="Ver"
+              onClick={() => onView(row)}
+            >
+              <Eye className="size-4" />
+            </Button>
+            <Button
+              size="icon"
+              variant="ghost"
               aria-label="Editar"
               onClick={() => onEdit(row)}
             >
@@ -173,6 +181,9 @@ export function ActivitiesTabPanel({
     )
   }
 
+  // "Ver" no aparece acá: en mobile se accede tocando la card directamente
+  // (ver onClick en el Card más abajo), así que el menú solo trae acciones
+  // que modifican datos.
   function renderCardMenu(row: Activity) {
     const items = isOpenTab
       ? [
@@ -194,11 +205,6 @@ export function ActivitiesTabPanel({
           },
         ]
       : [
-          {
-            label: 'Ver',
-            icon: <Eye />,
-            onSelect: () => onView(row),
-          },
           {
             label: 'Eliminar',
             icon: <Trash2 />,
@@ -325,7 +331,7 @@ export function ActivitiesTabPanel({
       key: 'actions',
       header: 'Acciones',
       align: 'right',
-      width: isOpenTab ? '150px' : '110px',
+      width: isOpenTab ? '190px' : '110px',
       cell: renderActions,
     },
   ]
@@ -397,7 +403,16 @@ export function ActivitiesTabPanel({
                 return (
                   <Card
                     key={activity.id}
-                    className={`relative overflow-hidden border-l-4 ${
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => onView(activity)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault()
+                        onView(activity)
+                      }
+                    }}
+                    className={`relative cursor-pointer overflow-hidden border-l-4 ${
                       isOpenTab ? 'border-l-primary' : 'border-l-emerald-500'
                     }`}
                   >

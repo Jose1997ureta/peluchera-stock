@@ -133,24 +133,33 @@ export type Database = {
         Row: {
           activities_count: number
           activity_ids: string[]
-          closed_at: string
+          closed_at: string | null
           id: string
+          initial_amount: number
+          opened_at: string | null
+          status: string
           total_profit: number
           total_revenue: number
         }
         Insert: {
           activities_count: number
           activity_ids?: string[]
-          closed_at?: string
+          closed_at?: string | null
           id?: string
+          initial_amount?: number
+          opened_at?: string | null
+          status?: string
           total_profit: number
           total_revenue: number
         }
         Update: {
           activities_count?: number
           activity_ids?: string[]
-          closed_at?: string
+          closed_at?: string | null
           id?: string
+          initial_amount?: number
+          opened_at?: string | null
+          status?: string
           total_profit?: number
           total_revenue?: number
         }
@@ -249,21 +258,37 @@ export type Database = {
         Args: { p_activity_id: string; p_revenue: number; p_sold_lines: Json }
         Returns: undefined
       }
-      create_activity: {
-        Args: { p_lines: Json; p_name: string; p_zona_id: number }
-        Returns: string
-      }
-      create_cash_cut: { Args: never; Returns: string }
+      close_cash_cut: { Args: never; Returns: string }
+      create_activity:
+        | {
+            Args: { p_description: string; p_lines: Json; p_name: string }
+            Returns: string
+          }
+        | {
+            Args: { p_lines: Json; p_name: string; p_zona_id: number }
+            Returns: string
+          }
       delete_activity: { Args: { p_activity_id: string }; Returns: undefined }
-      update_activity: {
-        Args: {
-          p_activity_id: string
-          p_lines: Json
-          p_name: string
-          p_zona_id: number
-        }
-        Returns: undefined
-      }
+      open_cash_cut: { Args: { p_initial_amount: number }; Returns: string }
+      update_activity:
+        | {
+            Args: {
+              p_activity_id: string
+              p_description: string
+              p_lines: Json
+              p_name: string
+            }
+            Returns: undefined
+          }
+        | {
+            Args: {
+              p_activity_id: string
+              p_lines: Json
+              p_name: string
+              p_zona_id: number
+            }
+            Returns: undefined
+          }
     }
     Enums: {
       [_ in never]: never

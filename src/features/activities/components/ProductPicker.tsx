@@ -1,4 +1,4 @@
-import { Search } from 'lucide-react'
+import { Search, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { Popover, PopoverContent, PopoverTrigger } from '@/shared/components/motion/popover'
 import { Input } from '@/shared/components/ui/input'
@@ -46,8 +46,18 @@ export function ProductPicker({ excludeProductIds, onSelect }: ProductPickerProp
             }}
             onFocus={() => setOpen(true)}
             placeholder="Buscar producto por nombre..."
-            className="pl-8"
+            className="pl-8 pr-8"
           />
+          {search ? (
+            <button
+              type="button"
+              aria-label="Limpiar búsqueda"
+              onClick={() => setSearch('')}
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+            >
+              <X className="size-4" />
+            </button>
+          ) : null}
         </div>
       </PopoverTrigger>
       <PopoverContent

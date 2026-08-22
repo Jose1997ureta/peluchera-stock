@@ -1,9 +1,9 @@
 import { useQuery } from '@tanstack/react-query'
-import { fetchCurrentCut } from './api'
+import { fetchCurrentCashCut } from './api'
 
-export function useCurrentCut() {
+export function useCurrentCashCut() {
   return useQuery({
     queryKey: ['cash-cuts', 'current'],
-    queryFn: fetchCurrentCut,
+    queryFn: fetchCurrentCashCut,
   })
 }

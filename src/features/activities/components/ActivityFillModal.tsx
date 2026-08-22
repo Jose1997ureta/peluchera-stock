@@ -1,5 +1,5 @@
 import { useFormik } from 'formik'
-import { Search } from 'lucide-react'
+import { Search, X } from 'lucide-react'
 import { type FocusEvent, useEffect, useMemo, useState } from 'react'
 import {
   CenterMorphModal,
@@ -21,6 +21,9 @@ import { toast } from '@/shared/lib/toast'
 import type { Activity } from '@/shared/types/activity'
 import type { Product } from '@/shared/types/product'
 import { formatCurrency } from '@/shared/utils/currency'
+import { OpenCashCutForm } from '@/features/caja-chica/components/OpenCashCutForm'
+import { useCurrentCashCut } from '@/features/caja-chica/hooks/useCurrentCashCut'
+import { useOpenCashCut } from '@/features/caja-chica/hooks/useOpenCashCut'
 import { useCloseActivity } from '../hooks/useCloseActivity'
 import { useProductsByIds } from '../hooks/useProductsByIds'
 import { useZonas } from '../hooks/useZonas'
@@ -64,8 +67,11 @@ export function ActivityFillModal({
   activity,
 }: ActivityFillModalProps) {
   const closeActivity = useCloseActivity()
+  const currentCashCut = useCurrentCashCut()
+  const openCashCut = useOpenCashCut()
   const { data: zonas } = useZonas()
   const [search, setSearch] = useState('')
+  const [openCajaPromptOpen, setOpenCajaPromptOpen] = useState(false)
 
   const lineProductIds = useMemo(
     () => activity?.products.map((line) => line.productId) ?? [],
@@ -90,31 +96,51 @@ export function ActivityFillModal({
     validationSchema: activityFillSchema,
     enableReinitialize: true,
     onSubmit: async (values, { setSubmitting }) => {
-      if (!activity) return
-      try {
-        await closeActivity.mutateAsync({
-          id: activity.id,
-          revenue: Number(values.revenue),
-          soldLines: values.products.map((line) => ({
-            productId: line.productId,
-            soldQty: Number(line.soldQty),
-          })),
-        })
-        toast.success('Actividad cerrada.')
-        onOpenChange(false)
-      } catch {
-        toast.error('No se pudo cerrar la actividad. Intentá de nuevo.')
-      } finally {
-        setSubmitting(false)
-      }
+      await submitClose(values)
+      setSubmitting(false)
     },
   })
+
+  async function submitClose(values: ActivityFillFormValues) {
+    if (!activity) return
+
+    if (!currentCashCut.data) {
+      setOpenCajaPromptOpen(true)
+      return
+    }
+
+    try {
+      await closeActivity.mutateAsync({
+        id: activity.id,
+        revenue: Number(values.revenue),
+        soldLines: values.products.map((line) => ({
+          productId: line.productId,
+          soldQty: Number(line.soldQty),
+        })),
+      })
+      toast.success('Actividad cerrada.')
+      onOpenChange(false)
+    } catch {
+      toast.error('No se pudo cerrar la actividad. Intentá de nuevo.')
+    }
+  }
+
+  async function handleOpenCajaAndContinue(initialAmount: number) {
+    try {
+      await openCashCut.mutateAsync(initialAmount)
+      setOpenCajaPromptOpen(false)
+      await submitClose(formik.values)
+    } catch {
+      toast.error('No se pudo abrir la caja. Intentá de nuevo.')
+    }
+  }
 
   useEffect(() => {
     if (!open) {
       formik.resetForm()
       // eslint-disable-next-line react-hooks/set-state-in-effect -- clear the search box when the modal closes, not an external sync
       setSearch('')
+      setOpenCajaPromptOpen(false)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- reset only when the modal closes, not on every formik identity change
   }, [open])
@@ -338,8 +364,18 @@ export function ActivityFillModal({
                     value={search}
                     onChange={(event) => setSearch(event.target.value)}
                     placeholder="Buscar producto..."
-                    className="pl-8"
+                    className="pl-8 pr-8"
                   />
+                  {search ? (
+                    <button
+                      type="button"
+                      aria-label="Limpiar búsqueda"
+                      onClick={() => setSearch('')}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                    >
+                      <X className="size-4" />
+                    </button>
+                  ) : null}
                 </div>
               ) : null}
 
@@ -492,6 +528,31 @@ export function ActivityFillModal({
           </div>
         </form>
       </CenterMorphModalContent>
+
+      <CenterMorphModal open={openCajaPromptOpen} onOpenChange={setOpenCajaPromptOpen}>
+        <CenterMorphModalContent
+          ariaLabel="Abrir caja"
+          dismissible={!openCashCut.isPending}
+        >
+          <div className="p-6">
+            <h2 className="text-lg font-semibold text-foreground">
+              Abrí la caja para continuar
+            </h2>
+            <p className="mt-2 text-sm text-muted-foreground">
+              Para cerrar una actividad hace falta una caja abierta. Los datos que ya cargaste
+              no se pierden: al abrir la caja, la actividad se cierra sola a continuación.
+            </p>
+
+            <div className="mt-4">
+              <OpenCashCutForm
+                idPrefix="open-caja-fill"
+                isPending={openCashCut.isPending}
+                onSubmit={handleOpenCajaAndContinue}
+              />
+            </div>
+          </div>
+        </CenterMorphModalContent>
+      </CenterMorphModal>
     </CenterMorphModal>
   )
 }
