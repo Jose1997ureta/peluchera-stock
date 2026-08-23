@@ -4,7 +4,7 @@ import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis } from 'recharts'
 import { Button } from '@/shared/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/shared/components/motion/tabs'
 import { formatCurrency } from '@/shared/utils/currency'
-import type { DashboardMetrics } from '../hooks/api'
+import type { PeriodHistoryEntry } from '../utils/periodBreakdown'
 import {
   formatMonthLabel,
   formatYearLabel,
@@ -18,17 +18,19 @@ import {
   previousYear,
   weeklyBreakdownForMonth,
   yearTotal,
-} from '../utils/salesPeriods'
+} from '../utils/periodBreakdown'
 
 function PeriodNav({
   label,
   total,
+  formatValue,
   onPrevious,
   onNext,
   nextDisabled,
 }: {
   label: string
   total: number
+  formatValue: (value: number) => string
   onPrevious: () => void
   onNext: () => void
   nextDisabled: boolean
@@ -50,18 +52,24 @@ function PeriodNav({
           <ChevronRight className="size-4" />
         </Button>
       </div>
-      <p className="text-lg font-semibold text-foreground">{formatCurrency(total)}</p>
+      <p className="text-lg font-semibold text-foreground">{formatValue(total)}</p>
     </div>
   )
 }
 
-function PeriodChart({ bars }: { bars: { label: string; amount: number }[] }) {
+function PeriodChart({
+  bars,
+  formatValue,
+}: {
+  bars: { label: string; amount: number }[]
+  formatValue: (value: number) => string
+}) {
   return (
     <div className="h-40 w-full">
       <ResponsiveContainer width="100%" height="100%">
         <BarChart data={bars}>
           <XAxis dataKey="label" tick={{ fontSize: 12 }} />
-          <Tooltip formatter={(value: number) => formatCurrency(value)} />
+          <Tooltip formatter={(value: number) => formatValue(value)} />
           <Bar dataKey="amount" fill="var(--color-primary)" radius={[4, 4, 0, 0]} />
         </BarChart>
       </ResponsiveContainer>
@@ -69,13 +77,26 @@ function PeriodChart({ bars }: { bars: { label: string; amount: number }[] }) {
   )
 }
 
-export function SalesPeriodCard({ salesHistory }: { salesHistory: DashboardMetrics['salesHistory'] }) {
+/** Tarjeta genérica de navegación Mes/Año sobre una serie de {date, amount}[] — usada para inversión, ganancia y cantidad de actividades. */
+export function PeriodChartCard({
+  history,
+  formatValue = formatCurrency,
+}: {
+  history: PeriodHistoryEntry[]
+  formatValue?: (value: number) => string
+}) {
   const now = useMemo(() => new Date(), [])
   const [monthCursor, setMonthCursor] = useState(now)
   const [yearCursor, setYearCursor] = useState(now)
 
-  const monthBars = useMemo(() => weeklyBreakdownForMonth(salesHistory, monthCursor), [salesHistory, monthCursor])
-  const yearBars = useMemo(() => monthlyBreakdownForYear(salesHistory, yearCursor), [salesHistory, yearCursor])
+  const monthBars = useMemo(
+    () => weeklyBreakdownForMonth(history, monthCursor),
+    [history, monthCursor],
+  )
+  const yearBars = useMemo(
+    () => monthlyBreakdownForYear(history, yearCursor),
+    [history, yearCursor],
+  )
 
   return (
     <Tabs defaultValue="month" variant="pill">
@@ -87,23 +108,25 @@ export function SalesPeriodCard({ salesHistory }: { salesHistory: DashboardMetri
       <TabsContent value="month" className="space-y-3 pt-3">
         <PeriodNav
           label={formatMonthLabel(monthCursor)}
-          total={monthTotal(salesHistory, monthCursor)}
+          total={monthTotal(history, monthCursor)}
+          formatValue={formatValue}
           onPrevious={() => setMonthCursor(previousMonth(monthCursor))}
           onNext={() => setMonthCursor(nextMonth(monthCursor))}
           nextDisabled={isCurrentMonth(monthCursor, now)}
         />
-        <PeriodChart bars={monthBars} />
+        <PeriodChart bars={monthBars} formatValue={formatValue} />
       </TabsContent>
 
       <TabsContent value="year" className="space-y-3 pt-3">
         <PeriodNav
           label={formatYearLabel(yearCursor)}
-          total={yearTotal(salesHistory, yearCursor)}
+          total={yearTotal(history, yearCursor)}
+          formatValue={formatValue}
           onPrevious={() => setYearCursor(previousYear(yearCursor))}
           onNext={() => setYearCursor(nextYear(yearCursor))}
           nextDisabled={isCurrentYear(yearCursor, now)}
         />
-        <PeriodChart bars={yearBars} />
+        <PeriodChart bars={yearBars} formatValue={formatValue} />
       </TabsContent>
     </Tabs>
   )

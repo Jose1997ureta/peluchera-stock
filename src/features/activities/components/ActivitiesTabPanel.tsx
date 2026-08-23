@@ -46,23 +46,31 @@ const DEFAULT_SORT: SortState = { key: 'createdAt', direction: 'desc' }
 
 /** Ancho mínimo legible de la columna "Nombre" antes de recurrir a scroll horizontal. */
 const MIN_NAME_WIDTH = 220
-/** Suma de los anchos fijos del resto de columnas (# + Zona + Productos + Monto est. + Monto real + Creada + Acciones). */
+/** Suma de los anchos fijos del resto de columnas (# + Zona + Productos + Creada + Acciones + Inversión [+ Ganancias en Cerradas]). */
 function otherColumnsWidth(isOpenTab: boolean): number {
-  return 56 + 120 + 110 + 150 + 150 + 120 + (isOpenTab ? 190 : 110)
+  const base = 56 + 120 + 110 + 120 + 140 + (isOpenTab ? 190 : 110)
+  return isOpenTab ? base : base + 140
 }
 
-function estimatedAmount(activity: Activity): number {
+/** `Σ unit_price * initial_qty` — valor reservado en stock para la actividad ("Inversión" en Abiertas, todavía no hay `sold_qty`). */
+function reservedInvestmentAmount(activity: Activity): number {
   return activity.products.reduce(
     (sum, line) => sum + line.unitPrice * line.initialQty,
     0,
   )
 }
 
-function soldAmount(activity: Activity): number {
+/** `Σ unit_price * sold_qty` — el costo a precio de catálogo de lo efectivamente vendido ("Inversión" en Cerradas). */
+function investmentAmount(activity: Activity): number {
   return activity.products.reduce(
     (sum, line) => sum + line.unitPrice * line.soldQty,
     0,
   )
+}
+
+/** Ingreso real − Inversión (solo tiene sentido en actividades cerradas, que ya tienen `revenue`). */
+function gainAmount(activity: Activity): number {
+  return (activity.revenue ?? 0) - investmentAmount(activity)
 }
 
 export interface ActivitiesTabPanelProps {
@@ -293,28 +301,53 @@ export function ActivitiesTabPanel({
         <span className="tabular-nums">{row.products.length}</span>
       ),
     },
-    {
-      key: 'estimatedAmount',
-      header: 'Monto estimado',
-      sortable: true,
-      align: 'right',
-      width: '150px',
-      cell: (row) => (
-        <span className="tabular-nums">
-          {formatCurrency(estimatedAmount(row))}
-        </span>
-      ),
-    },
-    {
-      key: 'soldAmount',
-      header: 'Monto real',
-      sortable: true,
-      align: 'right',
-      width: '150px',
-      cell: (row) => (
-        <span className="tabular-nums">{formatCurrency(soldAmount(row))}</span>
-      ),
-    },
+    isOpenTab
+      ? ({
+          key: 'estimatedAmount',
+          header: 'Inversión',
+          sortable: true,
+          align: 'right',
+          width: '140px',
+          cell: (row) => (
+            <span className="tabular-nums">
+              {formatCurrency(reservedInvestmentAmount(row))}
+            </span>
+          ),
+        } satisfies TableColumn<Activity>)
+      : ({
+          key: 'soldAmount',
+          header: 'Inversión',
+          sortable: true,
+          align: 'right',
+          width: '140px',
+          cell: (row) => (
+            <span className="tabular-nums">
+              {formatCurrency(investmentAmount(row))}
+            </span>
+          ),
+        } satisfies TableColumn<Activity>),
+    ...(isOpenTab
+      ? []
+      : [
+          {
+            key: 'gainAmount',
+            header: 'Ganancias',
+            align: 'right',
+            width: '140px',
+            cell: (row) => {
+              const gain = gainAmount(row)
+              return (
+                <span
+                  className={`tabular-nums font-medium ${
+                    gain >= 0 ? 'text-emerald-600' : 'text-destructive'
+                  }`}
+                >
+                  {formatCurrency(gain)}
+                </span>
+              )
+            },
+          } satisfies TableColumn<Activity>,
+        ]),
     {
       key: 'createdAt',
       header: 'Creada',
@@ -394,12 +427,10 @@ export function ActivitiesTabPanel({
               renderEmptyState()
             ) : (
               items.map((activity) => {
-                const estimated = estimatedAmount(activity)
-                const sold = soldAmount(activity)
-                const progress =
-                  estimated > 0
-                    ? Math.min(100, Math.round((sold / estimated) * 100))
-                    : 0
+                const investment = isOpenTab
+                  ? reservedInvestmentAmount(activity)
+                  : investmentAmount(activity)
+                const gain = gainAmount(activity)
                 return (
                   <Card
                     key={activity.id}
@@ -459,31 +490,28 @@ export function ActivitiesTabPanel({
                         <div className="flex items-center justify-between">
                           <span className="flex items-center gap-1.5 text-muted-foreground">
                             <Wallet className="size-3.5" />
-                            Monto estimado
+                            Inversión
                           </span>
                           <span className="tabular-nums">
-                            {formatCurrency(estimated)}
+                            {formatCurrency(investment)}
                           </span>
                         </div>
 
-                        <div className="flex items-center justify-between">
-                          <span className="flex items-center gap-1.5 text-muted-foreground">
-                            <Wallet className="size-3.5" />
-                            Monto real
-                          </span>
-                          <span className="font-medium tabular-nums text-foreground">
-                            {formatCurrency(sold)}
-                          </span>
-                        </div>
-
-                        <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
-                          <div
-                            className={`h-full rounded-full transition-all duration-500 ${
-                              isOpenTab ? 'bg-primary' : 'bg-emerald-500'
-                            }`}
-                            style={{ width: `${progress}%` }}
-                          />
-                        </div>
+                        {!isOpenTab ? (
+                          <div className="flex items-center justify-between">
+                            <span className="flex items-center gap-1.5 text-muted-foreground">
+                              <Wallet className="size-3.5" />
+                              Ganancias
+                            </span>
+                            <span
+                              className={`font-medium tabular-nums ${
+                                gain >= 0 ? 'text-emerald-600' : 'text-destructive'
+                              }`}
+                            >
+                              {formatCurrency(gain)}
+                            </span>
+                          </div>
+                        ) : null}
                       </div>
                     </CardContent>
                   </Card>

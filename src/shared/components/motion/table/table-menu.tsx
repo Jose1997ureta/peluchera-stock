@@ -104,7 +104,11 @@ export function TableMenu({
                     key={item.label}
                     type="button"
                     role="menuitem"
-                    onClick={() => {
+                    onClick={(e) => {
+                      // React bubbles portaled clicks through the component tree, not the
+                      // DOM tree — without this, selecting an item here also fires a click
+                      // handler on whatever row/card this menu is rendered inside of.
+                      e.stopPropagation();
                       setCoords(null);
                       item.onSelect();
                     }}

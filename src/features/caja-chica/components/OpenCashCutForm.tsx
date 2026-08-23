@@ -8,11 +8,21 @@ export interface OpenCashCutFormProps {
   isPending: boolean
   onSubmit: (initialAmount: number) => void
   idPrefix?: string
+  /** Precarga el campo (modo edición) en vez de arrancar vacío. */
+  initialValue?: number
+  /** Texto del botón de submit. Por defecto "Abrir caja". */
+  submitLabel?: string
 }
 
-/** Formulario chico y reutilizable para abrir una caja: monto inicial + botón. Sin selector de moneda (la app opera en una sola moneda). */
-export function OpenCashCutForm({ isPending, onSubmit, idPrefix = 'open-caja' }: OpenCashCutFormProps) {
-  const [initialAmount, setInitialAmount] = useState('')
+/** Formulario chico y reutilizable para abrir (o editar el monto inicial de) una caja. Sin selector de moneda (la app opera en una sola moneda). */
+export function OpenCashCutForm({
+  isPending,
+  onSubmit,
+  idPrefix = 'open-caja',
+  initialValue,
+  submitLabel = 'Abrir caja',
+}: OpenCashCutFormProps) {
+  const [initialAmount, setInitialAmount] = useState(initialValue !== undefined ? String(initialValue) : '')
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -39,7 +49,7 @@ export function OpenCashCutForm({ isPending, onSubmit, idPrefix = 'open-caja' }:
         />
       </div>
       <Button type="submit" disabled={isPending}>
-        Abrir caja
+        {submitLabel}
       </Button>
     </form>
   )

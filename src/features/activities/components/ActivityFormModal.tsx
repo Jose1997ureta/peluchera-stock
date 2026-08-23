@@ -31,6 +31,7 @@ import {
   type ActivityFormValues,
   type ActivityLineFormValues,
 } from '../schemas/activity.schema'
+import { ActivityImportModal } from './ActivityImportModal'
 import { ActivityProductThumbnail } from './ActivityProductThumbnail'
 import { ProductPicker } from './ProductPicker'
 
@@ -75,8 +76,15 @@ export function ActivityFormModal({
   const isEditing = mode === 'edit'
   const createActivity = useCreateActivity()
   const updateActivity = useUpdateActivity()
+  const isSaving = createActivity.isPending || updateActivity.isPending
   const { data: zonas } = useZonas()
   const [search, setSearch] = useState('')
+  const [pendingSubmit, setPendingSubmit] = useState<ActivityFormValues | null>(
+    null,
+  )
+  const [discardConfirmOpen, setDiscardConfirmOpen] = useState(false)
+  const [importModalOpen, setImportModalOpen] = useState(false)
+  const [hasImportedOnce, setHasImportedOnce] = useState(false)
 
   const lineProductIds = useMemo(
     () => activity?.products.map((line) => line.productId) ?? [],
@@ -101,42 +109,58 @@ export function ActivityFormModal({
         : activityInitialValues,
     validationSchema: activitySchema,
     enableReinitialize: true,
-    onSubmit: async (values, { setSubmitting, resetForm }) => {
-      const input = {
-        name: values.name.trim(),
-        zonaId: Number(values.zonaId),
-        products: values.products.map((line) => ({
-          productId: line.productId,
-          unitPrice: line.unitPrice,
-          initialQty: Number(line.initialQty),
-        })),
-      }
-
-      const mutation =
-        isEditing && activity
-          ? updateActivity.mutateAsync({ id: activity.id, input })
-          : createActivity.mutateAsync(input)
-
-      try {
-        await mutation
-        toast.success(
-          isEditing ? 'Actividad actualizada.' : 'Actividad creada.',
-        )
-        resetForm()
-        onOpenChange(false)
-      } catch {
-        toast.error('No se pudo guardar la actividad. Intentá de nuevo.')
-      } finally {
-        setSubmitting(false)
-      }
+    onSubmit: (values, { setSubmitting }) => {
+      // La confirmación explícita ("¿Confirmás...?") es la que efectivamente dispara
+      // la mutación — este onSubmit solo corre cuando la validación ya pasó.
+      setPendingSubmit(values)
+      setSubmitting(false)
     },
   })
+
+  async function performSave(values: ActivityFormValues) {
+    const input = {
+      name: values.name.trim(),
+      zonaId: Number(values.zonaId),
+      products: values.products.map((line) => ({
+        productId: line.productId,
+        unitPrice: line.unitPrice,
+        initialQty: Number(line.initialQty),
+      })),
+    }
+
+    const mutation =
+      isEditing && activity
+        ? updateActivity.mutateAsync({ id: activity.id, input })
+        : createActivity.mutateAsync(input)
+
+    try {
+      await mutation
+      toast.success(isEditing ? 'Actividad actualizada.' : 'Actividad creada.')
+      setPendingSubmit(null)
+      formik.resetForm()
+      onOpenChange(false)
+    } catch {
+      toast.error('No se pudo guardar la actividad. Intentá de nuevo.')
+    }
+  }
+
+  function handleRequestClose() {
+    if (formik.dirty) {
+      setDiscardConfirmOpen(true)
+    } else {
+      onOpenChange(false)
+    }
+  }
 
   useEffect(() => {
     if (!open) {
       formik.resetForm()
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- clear the search box when the modal closes, not an external sync
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- clear transient UI state when the modal closes, not an external sync
       setSearch('')
+      setPendingSubmit(null)
+      setDiscardConfirmOpen(false)
+      setImportModalOpen(false)
+      setHasImportedOnce(false)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- reset only when the modal closes, not on every formik identity change
   }, [open])
@@ -150,6 +174,10 @@ export function ActivityFormModal({
 
   const selectedProductIds = formik.values.products.map(
     (line) => line.productId,
+  )
+  const totalQty = formik.values.products.reduce(
+    (sum, line) => sum + (Number(line.initialQty) || 0),
+    0,
   )
   const estimatedTotal = formik.values.products.reduce(
     (sum, line) => sum + line.unitPrice * (Number(line.initialQty) || 0),
@@ -165,7 +193,18 @@ export function ActivityFormModal({
       maxQty: product.stock,
       initialQty: '1',
     }
-    formik.setFieldValue('products', [...formik.values.products, next])
+    formik.setFieldValue('products', [next, ...formik.values.products])
+  }
+
+  function handleImportLines(lines: ActivityLineFormValues[], replace: boolean) {
+    if (replace) {
+      formik.setFieldValue('products', lines)
+    } else {
+      const existingIds = new Set(selectedProductIds)
+      const newLines = lines.filter((line) => !existingIds.has(line.productId))
+      formik.setFieldValue('products', [...newLines, ...formik.values.products])
+    }
+    setHasImportedOnce(true)
   }
 
   function handleRemoveLine(index: number) {
@@ -326,10 +365,20 @@ export function ActivityFormModal({
     HEADER_HEIGHT
 
   return (
-    <CenterMorphModal open={open} onOpenChange={onOpenChange}>
+    <CenterMorphModal
+      open={open}
+      onOpenChange={(next) => {
+        if (!next) {
+          handleRequestClose()
+        } else {
+          onOpenChange(next)
+        }
+      }}
+    >
       <CenterMorphModalContent
         ariaLabel={isEditing ? 'Editar actividad' : 'Crear actividad'}
-        dismissible={!formik.isSubmitting}
+        dismissible={!isSaving}
+        autoFocus={false}
         className="max-w-5xl xl:max-w-6xl"
       >
         <form
@@ -341,7 +390,7 @@ export function ActivityFormModal({
             {isEditing ? 'Editar actividad' : 'Crear actividad'}
           </h2>
 
-          <div className="-mx-1 mt-4 grid grid-cols-1 gap-6 overflow-y-auto p-1 md:grid-cols-7 md:gap-8">
+          <div className="-mx-1 mt-4 flex min-h-0 flex-1 flex-col gap-6 p-1 md:grid md:grid-cols-7 md:gap-8">
             <div className="flex flex-col gap-4 md:col-span-2">
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="name">Nombre</Label>
@@ -377,13 +426,27 @@ export function ActivityFormModal({
               </div>
             </div>
 
-            <div className="flex flex-col gap-2 md:col-span-5">
+            <div className="flex min-h-0 flex-1 flex-col gap-2 md:col-span-5 md:flex-none">
               <Label>Productos</Label>
 
-              <ProductPicker
-                excludeProductIds={selectedProductIds}
-                onSelect={handleSelectProduct}
-              />
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                <div className="min-w-0 flex-1">
+                  <ProductPicker
+                    excludeProductIds={selectedProductIds}
+                    onSelect={handleSelectProduct}
+                  />
+                </div>
+                {!isEditing ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="w-full shrink-0 sm:w-auto"
+                    onClick={() => setImportModalOpen(true)}
+                  >
+                    Importar actividad
+                  </Button>
+                ) : null}
+              </div>
 
               {formik.values.products.length > 0 ? (
                 <div className="relative w-full sm:max-w-xs">
@@ -407,6 +470,7 @@ export function ActivityFormModal({
                 </div>
               ) : null}
 
+              <div className="-mx-1 min-h-0 flex-1 overflow-y-auto p-1 md:mx-0 md:flex-none md:overflow-visible md:p-0">
               {isLoadingLines ? (
                 <p className="text-sm text-muted-foreground">
                   Cargando productos de la actividad...
@@ -521,7 +585,15 @@ export function ActivityFormModal({
               )}
 
               {formik.values.products.length > 0 ? (
-                <div className="flex flex-col gap-1 rounded-lg bg-muted px-3 py-2.5">
+                <div className="mt-3 flex flex-col gap-1 rounded-lg bg-muted px-3 py-2.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-medium text-foreground">
+                      Cantidad
+                    </span>
+                    <span className="text-sm font-semibold tabular-nums text-foreground">
+                      {totalQty}
+                    </span>
+                  </div>
                   <div className="flex items-center justify-between">
                     <span className="text-sm font-medium text-foreground">
                       Monto estimado de venta
@@ -532,6 +604,7 @@ export function ActivityFormModal({
                   </div>
                 </div>
               ) : null}
+              </div>
             </div>
           </div>
 
@@ -539,17 +612,93 @@ export function ActivityFormModal({
             <Button
               type="button"
               variant="outline"
-              disabled={formik.isSubmitting}
-              onClick={() => onOpenChange(false)}
+              disabled={isSaving}
+              onClick={handleRequestClose}
             >
               Cancelar
             </Button>
-            <Button type="submit" disabled={formik.isSubmitting || isLoadingLines}>
+            <Button type="submit" disabled={isSaving || isLoadingLines}>
               {isEditing ? 'Guardar cambios' : 'Registrar'}
             </Button>
           </div>
         </form>
       </CenterMorphModalContent>
+
+      <CenterMorphModal
+        open={pendingSubmit !== null}
+        onOpenChange={(next) => {
+          if (!next) setPendingSubmit(null)
+        }}
+      >
+        <CenterMorphModalContent
+          ariaLabel={isEditing ? 'Confirmar cambios' : 'Confirmar creación'}
+          dismissible={!isSaving}
+        >
+          <div className="p-6">
+            <h2 className="text-lg font-semibold text-foreground">
+              {isEditing ? 'Guardar cambios' : 'Crear actividad'}
+            </h2>
+            <p className="mt-2 text-sm text-muted-foreground">
+              {isEditing
+                ? `¿Confirmás guardar los cambios de "${pendingSubmit?.name}"?`
+                : `¿Confirmás crear la actividad "${pendingSubmit?.name}"?`}
+            </p>
+
+            <div className="mt-6 flex justify-end gap-2">
+              <Button
+                variant="outline"
+                disabled={isSaving}
+                onClick={() => setPendingSubmit(null)}
+              >
+                Cancelar
+              </Button>
+              <Button
+                disabled={isSaving}
+                onClick={() => pendingSubmit && performSave(pendingSubmit)}
+              >
+                Confirmar
+              </Button>
+            </div>
+          </div>
+        </CenterMorphModalContent>
+      </CenterMorphModal>
+
+      <CenterMorphModal open={discardConfirmOpen} onOpenChange={setDiscardConfirmOpen}>
+        <CenterMorphModalContent ariaLabel="Descartar cambios">
+          <div className="p-6">
+            <h2 className="text-lg font-semibold text-foreground">
+              Tenés cambios sin guardar
+            </h2>
+            <p className="mt-2 text-sm text-muted-foreground">
+              ¿Seguro que querés cerrar? Los cambios que hiciste se van a perder.
+            </p>
+
+            <div className="mt-6 flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setDiscardConfirmOpen(false)}>
+                Seguir editando
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={() => {
+                  setDiscardConfirmOpen(false)
+                  onOpenChange(false)
+                }}
+              >
+                Descartar cambios
+              </Button>
+            </div>
+          </div>
+        </CenterMorphModalContent>
+      </CenterMorphModal>
+
+      {!isEditing ? (
+        <ActivityImportModal
+          open={importModalOpen}
+          onOpenChange={setImportModalOpen}
+          hasImportedBefore={hasImportedOnce}
+          onImport={handleImportLines}
+        />
+      ) : null}
     </CenterMorphModal>
   )
 }

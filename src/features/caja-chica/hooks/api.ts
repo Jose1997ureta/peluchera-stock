@@ -41,6 +41,7 @@ function subtotalRealOf(activity: ClosedActivityRow): number {
 function toCashCut(row: CashCutRow): CashCut {
   return {
     id: row.id,
+    sequenceNumber: row.sequence_number,
     status: row.status as CashCut['status'],
     initialAmount: row.initial_amount,
     openedAt: row.opened_at ?? row.closed_at ?? '',
@@ -131,12 +132,12 @@ export async function fetchHistoricalSummary(
   }
 }
 
+/** Todas las cajas (abiertas y cerradas), de la más reciente a la más antigua. */
 export async function fetchCashCuts(): Promise<CashCut[]> {
   const { data, error } = await supabase
     .from('cash_cuts')
     .select('*')
-    .eq('status', 'closed')
-    .order('closed_at', { ascending: false })
+    .order('opened_at', { ascending: false })
 
   if (error) throw error
   return (data ?? []).map(toCashCut)
@@ -145,6 +146,18 @@ export async function fetchCashCuts(): Promise<CashCut[]> {
 /** Abre una caja nueva con el monto inicial ingresado — falla si ya hay una caja abierta. */
 export async function openCashCut(initialAmount: number): Promise<void> {
   const { error } = await supabase.rpc('open_cash_cut', { p_initial_amount: initialAmount })
+  if (error) throw error
+}
+
+/** Corrige el monto inicial de una caja abierta — falla si la caja ya no está abierta. */
+export async function updateCashCutInitialAmount(params: {
+  cashCutId: string
+  initialAmount: number
+}): Promise<void> {
+  const { error } = await supabase.rpc('update_cash_cut_initial_amount', {
+    p_cash_cut_id: params.cashCutId,
+    p_new_amount: params.initialAmount,
+  })
   if (error) throw error
 }
 

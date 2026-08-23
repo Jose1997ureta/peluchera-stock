@@ -34,7 +34,13 @@ export function ProductPicker({ excludeProductIds, onSelect }: ProductPickerProp
   const results = (data ?? []).filter((product) => !excludeProductIds.includes(product.id))
 
   return (
-    <Popover open={open && results.length > 0} onOpenChange={setOpen} align="start" sideOffset={6}>
+    <Popover
+      open={open && results.length > 0}
+      onOpenChange={setOpen}
+      align="start"
+      sideOffset={6}
+      className="w-full"
+    >
       <PopoverTrigger>
         <div ref={triggerRef} className="relative w-full">
           <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />

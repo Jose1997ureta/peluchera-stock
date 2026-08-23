@@ -1,7 +1,8 @@
-import { Archive, Filter, TrendingUp, Wallet } from 'lucide-react'
-import { useState } from 'react'
+import { Archive, ChevronLeft, ChevronRight, Filter, Pencil, TrendingUp, Wallet } from 'lucide-react'
+import { useMemo, useState } from 'react'
 import { ConfirmActionDialog } from '@/shared/components/ConfirmActionDialog'
 import { MetricCard } from '@/shared/components/MetricCard'
+import { AnimatedBadge } from '@/shared/components/motion/animated-badge'
 import {
   Select,
   SelectContent,
@@ -17,7 +18,7 @@ import { Input } from '@/shared/components/ui/input'
 import { Label } from '@/shared/components/ui/label'
 import { useZonas } from '@/features/activities/hooks/useZonas'
 import { toast } from '@/shared/lib/toast'
-import type { CashCut } from '@/shared/types/cashCut'
+import type { CashCut, CashCutHistoryRow } from '@/shared/types/cashCut'
 import { formatCurrency } from '@/shared/utils/currency'
 import { formatDate } from '@/shared/utils/date'
 import { useCashCuts } from '../hooks/useCashCuts'
@@ -25,9 +26,43 @@ import { useCloseCashCut } from '../hooks/useCloseCashCut'
 import { useCurrentCashCut } from '../hooks/useCurrentCashCut'
 import { useHistoricalSummary } from '../hooks/useHistoricalSummary'
 import { useOpenCashCut } from '../hooks/useOpenCashCut'
+import { useUpdateCashCutInitialAmount } from '../hooks/useUpdateCashCutInitialAmount'
+import { EditCashCutInitialAmountModal } from './EditCashCutInitialAmountModal'
 import { OpenCashCutForm } from './OpenCashCutForm'
 
 const ALL_ZONES = 'all'
+const HISTORY_PAGE_SIZE = 10
+
+/** Cada caja aporta 1 fila (apertura) o 2 (apertura + cierre) al Historial de cajas. */
+function toHistoryRows(cut: CashCut): CashCutHistoryRow[] {
+  const rows: CashCutHistoryRow[] = [
+    {
+      key: `${cut.id}-opening`,
+      cashCutId: cut.id,
+      sequenceNumber: cut.sequenceNumber,
+      kind: 'opening',
+      amount: cut.initialAmount,
+      date: cut.openedAt,
+      status: 'open',
+      editable: cut.status === 'open',
+    },
+  ]
+
+  if (cut.closedAt) {
+    rows.push({
+      key: `${cut.id}-closing`,
+      cashCutId: cut.id,
+      sequenceNumber: cut.sequenceNumber,
+      kind: 'closing',
+      amount: cut.totalRevenue,
+      date: cut.closedAt,
+      status: 'closed',
+      editable: false,
+    })
+  }
+
+  return rows
+}
 
 function ProfitAmount({ amount, size }: { amount: number; size: 'lg' | 'sm' }) {
   const className =
@@ -39,12 +74,26 @@ function ProfitAmount({ amount, size }: { amount: number; size: 'lg' | 'sm' }) {
 
 function CajaChicaTab() {
   const [confirmOpen, setConfirmOpen] = useState(false)
+  const [editingCashCutId, setEditingCashCutId] = useState<string | null>(null)
+  const [page, setPage] = useState(1)
   const currentCashCut = useCurrentCashCut()
   const cashCuts = useCashCuts()
   const openCashCut = useOpenCashCut()
   const closeCashCut = useCloseCashCut()
+  const updateInitialAmount = useUpdateCashCutInitialAmount()
 
   const cut = currentCashCut.data
+  const allCuts = cashCuts.data ?? []
+  const totalPages = Math.max(1, Math.ceil(allCuts.length / HISTORY_PAGE_SIZE))
+  const pageCuts = allCuts.slice((page - 1) * HISTORY_PAGE_SIZE, page * HISTORY_PAGE_SIZE)
+  const rows = useMemo(
+    () =>
+      pageCuts
+        .flatMap(toHistoryRows)
+        .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0)),
+    [pageCuts],
+  )
+  const editingCut = allCuts.find((candidate) => candidate.id === editingCashCutId) ?? null
 
   async function handleOpenCashCut(initialAmount: number) {
     try {
@@ -65,50 +114,69 @@ function CajaChicaTab() {
     }
   }
 
-  const columns: TableColumn<CashCut>[] = [
+  async function handleUpdateInitialAmount(initialAmount: number) {
+    if (!editingCashCutId) return
+    try {
+      await updateInitialAmount.mutateAsync({ cashCutId: editingCashCutId, initialAmount })
+      toast.success('Monto inicial actualizado.')
+      setEditingCashCutId(null)
+    } catch {
+      toast.error('No se pudo actualizar el monto inicial. Intentá de nuevo.')
+    }
+  }
+
+  const columns: TableColumn<CashCutHistoryRow>[] = [
     {
-      key: 'openedAt',
-      header: 'Apertura',
+      key: 'sequenceNumber',
+      header: 'N° de caja',
       align: 'left',
-      cell: (row) => <span className="tabular-nums">{formatDate(row.openedAt)}</span>,
+      width: '100px',
+      cell: (row) => <span className="tabular-nums">{row.sequenceNumber}</span>,
     },
     {
-      key: 'closedAt',
-      header: 'Cierre',
+      key: 'amount',
+      header: 'Monto',
+      align: 'right',
+      width: '130px',
+      cell: (row) => <span className="tabular-nums">{formatCurrency(row.amount)}</span>,
+    },
+    {
+      key: 'date',
+      header: 'Fecha',
       align: 'left',
-      cell: (row) => <span className="tabular-nums">{row.closedAt ? formatDate(row.closedAt) : '—'}</span>,
+      cell: (row) => <span className="tabular-nums">{formatDate(row.date)}</span>,
     },
     {
-      key: 'initialAmount',
-      header: 'Monto inicial',
-      align: 'right',
-      width: '130px',
-      cell: (row) => <span className="tabular-nums">{formatCurrency(row.initialAmount)}</span>,
+      key: 'status',
+      header: 'Estado',
+      align: 'left',
+      width: '120px',
+      cell: (row) => (
+        <AnimatedBadge size="sm" status={row.status === 'open' ? 'info' : 'success'} showIcon={false}>
+          {row.status === 'open' ? 'Abierto' : 'Cerrado'}
+        </AnimatedBadge>
+      ),
     },
     {
-      key: 'activitiesCount',
-      header: 'Actividades',
+      key: 'editar',
+      header: '',
       align: 'right',
-      width: '110px',
-      cell: (row) => <span className="tabular-nums">{row.activitiesCount}</span>,
-    },
-    {
-      key: 'totalRevenue',
-      header: 'Subtotal real',
-      align: 'right',
-      width: '130px',
-      cell: (row) => <span className="tabular-nums">{formatCurrency(row.totalRevenue)}</span>,
-    },
-    {
-      key: 'totalProfit',
-      header: 'Ganancia',
-      align: 'right',
-      width: '130px',
-      cell: (row) => <ProfitAmount amount={row.totalProfit} size="sm" />,
+      width: '70px',
+      cell: (row) =>
+        row.editable ? (
+          <div className="flex justify-end">
+            <Button
+              size="icon"
+              variant="ghost"
+              aria-label="Editar"
+              onClick={() => setEditingCashCutId(row.cashCutId)}
+            >
+              <Pencil className="size-4" />
+            </Button>
+          </div>
+        ) : null,
     },
   ]
-
-  const cuts = cashCuts.data ?? []
 
   return (
     <div className="flex flex-col gap-6">
@@ -178,9 +246,9 @@ function CajaChicaTab() {
               Reintentar
             </Button>
           </div>
-        ) : cuts.length === 0 && !cashCuts.isLoading ? (
+        ) : allCuts.length === 0 && !cashCuts.isLoading ? (
           <p className="p-6 text-center text-sm text-muted-foreground">
-            Todavía no se cerró ninguna caja.
+            Todavía no se abrió ninguna caja.
           </p>
         ) : (
           <>
@@ -188,32 +256,36 @@ function CajaChicaTab() {
             <div className="flex flex-col gap-3 md:hidden">
               {cashCuts.isLoading
                 ? null
-                : cuts.map((historicCut) => (
-                    <Card key={historicCut.id}>
+                : rows.map((row) => (
+                    <Card key={row.key}>
                       <CardContent className="flex flex-col gap-2">
                         <div className="flex items-center justify-between">
                           <span className="font-medium text-foreground">
-                            {formatDate(historicCut.openedAt)} → {formatDate(historicCut.closedAt ?? '')}
+                            N° {row.sequenceNumber} · {formatDate(row.date)}
                           </span>
-                          <span className="text-sm text-muted-foreground">
-                            {historicCut.activitiesCount} actividad
-                            {historicCut.activitiesCount !== 1 ? 'es' : ''}
-                          </span>
+                          <AnimatedBadge
+                            size="sm"
+                            status={row.status === 'open' ? 'info' : 'success'}
+                            showIcon={false}
+                          >
+                            {row.status === 'open' ? 'Abierto' : 'Cerrado'}
+                          </AnimatedBadge>
                         </div>
-                        <div className="grid grid-cols-2 items-center gap-x-3 gap-y-1 text-sm">
-                          <span className="text-muted-foreground">Monto inicial</span>
-                          <span className="text-right tabular-nums">
-                            {formatCurrency(historicCut.initialAmount)}
-                          </span>
-                          <span className="text-muted-foreground">Subtotal real</span>
-                          <span className="text-right tabular-nums">
-                            {formatCurrency(historicCut.totalRevenue)}
-                          </span>
-                          <span className="text-muted-foreground">Ganancia</span>
-                          <span className="text-right">
-                            <ProfitAmount amount={historicCut.totalProfit} size="sm" />
-                          </span>
+                        <div className="flex items-center justify-between text-sm">
+                          <span className="text-muted-foreground">Monto</span>
+                          <span className="tabular-nums">{formatCurrency(row.amount)}</span>
                         </div>
+                        {row.editable ? (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="self-end"
+                            onClick={() => setEditingCashCutId(row.cashCutId)}
+                          >
+                            <Pencil className="size-4" />
+                            Editar
+                          </Button>
+                        ) : null}
                       </CardContent>
                     </Card>
                   ))}
@@ -221,14 +293,41 @@ function CajaChicaTab() {
 
             <div className="hidden md:block">
               <Table
-                data={cuts}
+                data={rows}
                 columns={columns}
-                getRowId={(row) => row.id}
+                getRowId={(row) => row.key}
                 loading={cashCuts.isLoading}
                 rowHeight={56}
-                height={Math.max(cuts.length, 1) * 56 + 44}
+                height={Math.max(rows.length, 1) * 56 + 44}
                 className="rounded-2xl"
               />
+            </div>
+
+            <div className="flex items-center justify-between text-sm text-muted-foreground">
+              <span>
+                {allCuts.length} caja{allCuts.length !== 1 ? 's' : ''}
+              </span>
+              <div className="flex items-center gap-2">
+                <Button
+                  size="icon"
+                  variant="outline"
+                  disabled={page <= 1}
+                  onClick={() => setPage((current) => current - 1)}
+                >
+                  <ChevronLeft className="size-4" />
+                </Button>
+                <span>
+                  Página {page} de {totalPages}
+                </span>
+                <Button
+                  size="icon"
+                  variant="outline"
+                  disabled={page >= totalPages}
+                  onClick={() => setPage((current) => current + 1)}
+                >
+                  <ChevronRight className="size-4" />
+                </Button>
+              </div>
             </div>
           </>
         )}
@@ -243,6 +342,22 @@ function CajaChicaTab() {
         isPending={closeCashCut.isPending}
         onConfirm={handleConfirmClose}
       />
+
+      {editingCut ? (
+        <EditCashCutInitialAmountModal
+          open={Boolean(editingCashCutId)}
+          onOpenChange={(next) => {
+            if (!next) setEditingCashCutId(null)
+          }}
+          sequenceNumber={editingCut.sequenceNumber}
+          status={editingCut.status}
+          openedAt={editingCut.openedAt}
+          activitiesCount={editingCut.activitiesCount}
+          initialAmount={editingCut.initialAmount}
+          isPending={updateInitialAmount.isPending}
+          onSubmit={handleUpdateInitialAmount}
+        />
+      ) : null}
     </div>
   )
 }

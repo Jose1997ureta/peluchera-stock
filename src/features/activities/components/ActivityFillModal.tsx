@@ -72,6 +72,7 @@ export function ActivityFillModal({
   const { data: zonas } = useZonas()
   const [search, setSearch] = useState('')
   const [openCajaPromptOpen, setOpenCajaPromptOpen] = useState(false)
+  const [discardConfirmOpen, setDiscardConfirmOpen] = useState(false)
 
   const lineProductIds = useMemo(
     () => activity?.products.map((line) => line.productId) ?? [],
@@ -138,12 +139,21 @@ export function ActivityFillModal({
   useEffect(() => {
     if (!open) {
       formik.resetForm()
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- clear the search box when the modal closes, not an external sync
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- clear transient UI state when the modal closes, not an external sync
       setSearch('')
       setOpenCajaPromptOpen(false)
+      setDiscardConfirmOpen(false)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- reset only when the modal closes, not on every formik identity change
   }, [open])
+
+  function handleRequestClose() {
+    if (formik.dirty) {
+      setDiscardConfirmOpen(true)
+    } else {
+      onOpenChange(false)
+    }
+  }
 
   const normalizedSearch = search.trim().toLowerCase()
   const filteredProducts = normalizedSearch
@@ -153,6 +163,10 @@ export function ActivityFillModal({
     : formik.values.products
 
   const revenueTotal = Number(formik.values.revenue) || 0
+  const soldQtyTotal = formik.values.products.reduce(
+    (sum, line) => sum + (Number(line.soldQty) || 0),
+    0,
+  )
   const soldSubtotalTotal = formik.values.products.reduce(
     (sum, line) => sum + line.unitPrice * (Number(line.soldQty) || 0),
     0,
@@ -292,10 +306,20 @@ export function ActivityFillModal({
     HEADER_HEIGHT
 
   return (
-    <CenterMorphModal open={open} onOpenChange={onOpenChange}>
+    <CenterMorphModal
+      open={open}
+      onOpenChange={(next) => {
+        if (!next) {
+          handleRequestClose()
+        } else {
+          onOpenChange(next)
+        }
+      }}
+    >
       <CenterMorphModalContent
         ariaLabel="Rellenar actividad"
         dismissible={!formik.isSubmitting}
+        autoFocus={false}
         className="max-w-5xl xl:max-w-6xl"
       >
         <form
@@ -306,13 +330,8 @@ export function ActivityFillModal({
           <h2 className="text-lg font-semibold text-foreground">
             Rellenar actividad
           </h2>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Registrá cuánto se vendió realmente de cada producto. Al guardar,
-            la actividad se cierra: se descuenta del stock solo lo vendido y
-            esta acción no se puede deshacer.
-          </p>
 
-          <div className="-mx-1 mt-4 grid grid-cols-1 gap-6 overflow-y-auto p-1 md:grid-cols-7 md:gap-8">
+          <div className="-mx-1 mt-4 flex min-h-0 flex-1 flex-col gap-6 p-1 md:grid md:grid-cols-7 md:gap-8">
             <div className="flex flex-col gap-4 md:col-span-2">
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="fill-name">Nombre</Label>
@@ -354,7 +373,7 @@ export function ActivityFillModal({
               </div>
             </div>
 
-            <div className="flex flex-col gap-2 md:col-span-5">
+            <div className="flex min-h-0 flex-1 flex-col gap-2 md:col-span-5 md:flex-none">
               <Label>Productos</Label>
 
               {formik.values.products.length > 0 ? (
@@ -379,6 +398,7 @@ export function ActivityFillModal({
                 </div>
               ) : null}
 
+              <div className="-mx-1 min-h-0 flex-1 overflow-y-auto p-1 md:mx-0 md:flex-none md:overflow-visible md:p-0">
               {isLoadingLines ? (
                 <p className="text-sm text-muted-foreground">
                   Cargando productos de la actividad...
@@ -476,7 +496,15 @@ export function ActivityFillModal({
               )}
 
               {formik.values.products.length > 0 ? (
-                <div className="flex flex-col gap-1.5 rounded-lg bg-muted px-4 py-3">
+                <div className="mt-3 flex flex-col gap-1.5 rounded-lg bg-muted px-4 py-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-medium text-foreground">
+                      Cantidad vendida
+                    </span>
+                    <span className="text-sm font-semibold tabular-nums text-foreground">
+                      {soldQtyTotal}
+                    </span>
+                  </div>
                   <div className="flex items-center justify-between">
                     <span className="text-sm font-medium text-foreground">
                       Subtotal real
@@ -507,6 +535,7 @@ export function ActivityFillModal({
                   </div>
                 </div>
               ) : null}
+              </div>
             </div>
           </div>
 
@@ -515,7 +544,7 @@ export function ActivityFillModal({
               type="button"
               variant="outline"
               disabled={formik.isSubmitting}
-              onClick={() => onOpenChange(false)}
+              onClick={handleRequestClose}
             >
               Cancelar
             </Button>
@@ -549,6 +578,34 @@ export function ActivityFillModal({
                 isPending={openCashCut.isPending}
                 onSubmit={handleOpenCajaAndContinue}
               />
+            </div>
+          </div>
+        </CenterMorphModalContent>
+      </CenterMorphModal>
+
+      <CenterMorphModal open={discardConfirmOpen} onOpenChange={setDiscardConfirmOpen}>
+        <CenterMorphModalContent ariaLabel="Descartar cambios">
+          <div className="p-6">
+            <h2 className="text-lg font-semibold text-foreground">
+              Tenés cambios sin guardar
+            </h2>
+            <p className="mt-2 text-sm text-muted-foreground">
+              ¿Seguro que querés cerrar? Los cambios que hiciste se van a perder.
+            </p>
+
+            <div className="mt-6 flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setDiscardConfirmOpen(false)}>
+                Seguir editando
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={() => {
+                  setDiscardConfirmOpen(false)
+                  onOpenChange(false)
+                }}
+              >
+                Descartar cambios
+              </Button>
             </div>
           </div>
         </CenterMorphModalContent>

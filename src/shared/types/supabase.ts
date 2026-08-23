@@ -137,6 +137,7 @@ export type Database = {
           id: string
           initial_amount: number
           opened_at: string | null
+          sequence_number: number
           status: string
           total_profit: number
           total_revenue: number
@@ -148,6 +149,7 @@ export type Database = {
           id?: string
           initial_amount?: number
           opened_at?: string | null
+          sequence_number?: number
           status?: string
           total_profit: number
           total_revenue: number
@@ -159,6 +161,7 @@ export type Database = {
           id?: string
           initial_amount?: number
           opened_at?: string | null
+          sequence_number?: number
           status?: string
           total_profit?: number
           total_revenue?: number
@@ -289,6 +292,10 @@ export type Database = {
             }
             Returns: undefined
           }
+      update_cash_cut_initial_amount: {
+        Args: { p_cash_cut_id: string; p_new_amount: number }
+        Returns: undefined
+      }
     }
     Enums: {
       [_ in never]: never

@@ -1,136 +1,142 @@
 # Dashboard Feature
 
 ## Versión
-v1-metricas-extendidas
+v7-metricas-adicionales
 
-> **Nota sobre v0:** el shell de navegación (sidebar animado) y las 3 métricas originales (ventas del mes, actividad más rentable, stock bajo) ya están implementados tal cual describía `v0-objective-draft` — esa sección se conserva sin cambios más abajo. Esta versión solo **agrega** 7 tarjetas nuevas al dashboard existente, no reemplaza nada.
+> **Nota sobre v0:** el shell de navegación (sidebar animado) ya está implementado tal cual describía `v0-objective-draft`. Las métricas originales de v0 fueron reemplazadas/renombradas/eliminadas por versiones posteriores — esta spec ya no describe la v0 de las tarjetas de métricas, solo el shell.
+>
+> **Nota sobre v2 — corrección de terminología:** se detectó que "Ventas del mes"/"Ventas por período"/etc. usaban como cálculo `Σ (unit_price * sold_qty)` — pero esa cifra es la que el resto de la app (modal de detalle de actividad, `spec/caja-chica/caja-chica-feature.md`) ya llama **"Inversión"** (precio de catálogo de lo vendido, no plata real entrante). La plata que efectivamente entra es `revenue` ("Ingreso"), y la **ganancia neta** real es `revenue - inversión` (lo que el modal de actividad muestra en verde como "Monto real"). v2 corrigió esto: todo lo que decía "Ventas" pasó a decir "Inversión", y se agregó "Ganancia del mes".
+>
+> **Nota sobre v3 — "Ganancia por período" + limpieza:** se agregó "Ganancia por período" (misma navegación Mes/Año que "Inversión por período"), se eliminaron "Actividad más rentable" y "Ticket promedio por actividad" (decisión del usuario), y se corrigió un bug de antigüedad negativa en "Actividades abiertas".
+>
+> **Nota sobre v4:** se eliminó "Stock valorizado" (decisión del usuario, sin reemplazo).
+>
+> **Nota sobre v5 — foco en inversión/ganancia:** se eliminaron "Productos con stock bajo" y "Productos más vendidos", y "Inversión por período" / "Ganancia por período" pasaron a ser las dos primeras tarjetas del dashboard.
+>
+> **Nota sobre v6 — se eliminan "Inversión del mes" y "Ganancia del mes":** quedaron redundantes con el total que ya muestra el encabezado "Mes" de cada tarjeta de período.
+>
+> **Nota sobre v7 (esta versión) — el dashboard se sentía vacío con solo 5 tarjetas; se agregan 4 más:**
+> - **"Actividades por período"**: mismo componente `PeriodChartCard` que "Inversión/Ganancia por período" (Mes/Año, ◀ / ▶), pero graficando **cantidad de actividades cerradas** en vez de un monto — `PeriodChartCard` gana un prop opcional `formatValue` para no forzar formato de moneda en un conteo.
+> - **"Ganancia acumulada histórica"**: KPI simple, `Σ` de ganancia de TODAS las actividades cerradas (sin filtro de mes) — complementa a "Ganancia por período" (que es navegable/parcial) con un total de referencia.
+> - **"Margen promedio"**: `gananciaHistórica / inversiónHistórica * 100`, `0` si no hay inversión — una lectura de rentabilidad relativa que hasta ahora no existía (todo lo demás son montos absolutos).
+> - **"Ranking de zonas (mes actual)"**: ganancia neta agrupada por `zona_id` de las actividades cerradas este mes, como ranking de barras horizontales (mismo patrón visual que la vieja "Productos más vendidos"). Requiere la tabla `zonas` (ya usada en Caja Chica → Historial).
+> - **"Historial de cajas cerradas"**: lista de hasta 5 cajas cerradas más recientes (número de caja + fecha de cierre + ganancia), reutilizando el hook `useCashCuts` ya existente de Caja Chica (`queryKey: ['cash-cuts', 'history']`) en vez de duplicar esa data en `useDashboardMetrics`.
 
 ## Objetivo
-Dar a la app un shell de navegación único (sidebar animado de beUI) que envuelva todas las rutas protegidas y sirva de punto de partida visual para el resto de las pantallas, y dentro de ese shell, mostrar en la ruta `/` un dashboard con las métricas clave del negocio: además de las 3 métricas originales (ventas del mes, actividad más rentable, productos con stock bajo), agregar visibilidad sobre caja chica, tendencia de ventas, productos top, actividades abiertas y salud general de inventario, sin agregar filtros ni configuración en esta versión.
+Dar a la app un shell de navegación único (sidebar animado de beUI) que envuelva todas las rutas protegidas, y dentro de ese shell, mostrar en la ruta `/` un dashboard enfocado en inversión, ganancia y actividad del negocio (por período navegable, del mes en curso e histórico), zonas más rentables, estado de caja chica/su historial y actividades abiertas — sin agregar filtros ni configuración en esta versión.
 
 ## Alcance objetivo
 
 ### Shell de navegación (Animated Sidebar)
 - Se usa el componente `animated-sidebar` de beUI (instalado vía su MCP) como único mecanismo de navegación principal de la app — no se combina con `Dock` ni con otro patrón de navegación en esta versión.
 - Vive en `src/app/` (layout de la app, no es parte de ninguna feature) y envuelve a todas las rutas protegidas por `AuthGuard`; `/login` queda fuera del shell.
-- Ítems de navegación de nivel superior (sin roles, todos los usuarios ven lo mismo):
-  - Dashboard → `/`
-  - Productos → `/productos`
-  - Actividades → `/actividades`
+- Ítems de navegación de nivel superior (sin roles, todos los usuarios ven lo mismo): Dashboard → `/`, Productos → `/productos`, Actividades → `/actividades`, Caja Chica → `/caja-chica`.
 - Perfil no es un ítem más del menú: vive en el **footer** de la sidebar como una tarjeta con avatar (iniciales de `nombre`/`apellido`), nombre completo y correo del usuario logueado (`AuthContext`); al hacer click navega a `/perfil`. En desktop colapsado se ve solo el avatar.
 - El shell no incluye acción de logout en esta versión — queda documentado en la spec de Profile (ver `spec/auth/login-feature.md`, sección "Política de estado").
 - En desktop: la sidebar se pliega a un rail de iconos y se expande a nombres + iconos; el usuario puede alternar el estado con un control visible en la propia sidebar.
 - En mobile: la sidebar se comporta como un sheet (overlay) disparado desde un botón de menú en la parte superior de la pantalla; no ocupa espacio fijo del layout.
 
-### Dashboard (métricas)
-- Ruta `/` muestra 3 tarjetas de métricas, sin filtros ni rango de fechas configurable en esta versión:
-  1. **Ventas del mes**: suma de montos reales vendidos (`unit_price * sold_qty`) de actividades con `status = 'closed'` cuyo `closed_at` cae en el mes en curso.
-  2. **Actividad más rentable**: la actividad `'closed'` con mayor monto real vendido (nombre + monto). Si no hay ninguna actividad cerrada, se muestra un estado vacío.
-  3. **Productos con stock bajo**: cantidad de productos **activos** (`is_active = true`, ver `spec/products/products-feature.md`) con `stock < LOW_STOCK_THRESHOLD`, con un listado corto (máx. 5) de los más críticos. Los productos desactivados no participan de esta métrica.
-- No se agregan métricas fuera de esta lista (ej. costo/margen) sin confirmarlo antes con el usuario, según lo indicado en `CLAUDE.md`.
+### Dashboard — tarjetas de métricas
+Ruta `/` muestra las siguientes tarjetas, **en este orden**, sin filtros ni rango de fechas configurable en esta versión, en un grid (`sm:grid-cols-2 lg:grid-cols-3`):
 
-### Dashboard (métricas nuevas — v1)
-Se agregan 7 tarjetas más, en el mismo grid, sin filtros configurables:
-
-4. **Estado de caja chica**: si hay una caja abierta (`useCurrentCashCut`), muestra "Abierta desde [fecha de apertura]" + el monto inicial. Si no hay ninguna caja abierta, muestra un estado vacío ("Sin caja abierta") con un link a `/caja-chica`. No duplica el subtotal real/ganancia en vivo (eso ya vive en `/caja-chica`).
-5. **Ventas por período** (reemplaza a la idea inicial de "Ventas por semana", ajustada tras feedback de usuario): tarjeta con dos sub-pestañas (`Tabs`, `variant="pill"`, mismo patrón que Actividades/Caja Chica) — **"Mes"** y **"Año"** — cada una navegable con controles ◀ / ▶ para moverse período a período (no una ventana fija de los últimos N):
-   - **Mes**: encabezado con el mes+año actualmente seleccionado (ej. "Junio 2026") y su total vendido; debajo, gráfico de barras (recharts) con el desglose por semana calendario **dentro de ese mes**. El botón ▶ se deshabilita al llegar al mes en curso (no se navega a futuro).
-   - **Año**: mismo patrón — encabezado con el año seleccionado y su total; debajo, gráfico de barras con el desglose por mes calendario dentro de ese año. ▶ deshabilitado al llegar al año en curso.
-   - No existe una sub-pestaña "Semana" (se descartó explícitamente: la semana es la unidad más chica, no hace falta navegar semana a semana por separado).
+1. **Inversión por período**: tarjeta con dos sub-pestañas (`Tabs`, `variant="pill"`) — **"Mes"** y **"Año"** — cada una navegable con controles ◀ / ▶ para moverse período a período (no una ventana fija de los últimos N):
+   - **Mes**: encabezado con el mes+año seleccionado (ej. "Junio 2026") y su inversión total; debajo, gráfico de barras (recharts) con el desglose por semana calendario **dentro de ese mes**. ▶ se deshabilita al llegar al mes en curso (no se navega a futuro).
+   - **Año**: mismo patrón a nivel de meses dentro del año. ▶ deshabilitado al llegar al año en curso.
+   - No existe una sub-pestaña "Semana" (descartada explícitamente: la semana es la unidad más chica, no hace falta navegarla por separado).
    - Al cargar el dashboard, arranca en el mes/año actual.
-6. **Productos más vendidos**: top 5 productos por `sold_qty` acumulado (suma de `activity_products.sold_qty` agrupado por `product_id`) entre todas las actividades `closed`, mostrados como un ranking con barras horizontales proporcionales al producto más vendido (no una lista de texto plano). Si no hay ninguna actividad cerrada, estado vacío ("Todavía no hay ventas registradas").
-7. **Actividades abiertas**: cantidad de actividades con `status = 'open'`, y de esas, nombre y antigüedad (en días, `now() - created_at`) de la más antigua. Si no hay ninguna abierta, estado vacío ("No hay actividades abiertas").
-8. **Ventas: mes actual vs. anterior**: dos montos (mes en curso y mes calendario anterior) + variación porcentual entre ambos, con un indicador visual (par de barras comparativas cortas + flecha de tendencia ↑/↓ coloreada según el signo), sobre el mismo cálculo de "ventas del mes" ya definido arriba. Si el mes anterior fue `0` y el actual no, se muestra la variación como "+100%" en vez de dividir por cero; si ambos son `0`, se muestra "0%" sin signo ni flecha.
-9. **Ticket promedio por actividad**: monto real vendido total (todas las actividades `closed`, sin filtro de mes) dividido por la cantidad de actividades `closed`. Si no hay ninguna actividad cerrada, estado vacío ("Todavía no hay actividades cerradas").
-10. **Stock valorizado**: `Σ (stock * price)` de productos **activos** (`is_active = true`), como medida de salud general de inventario — complementa a "Productos con stock bajo", no la reemplaza.
+2. **Ganancia por período**: mismo componente y mismo patrón de navegación que "Inversión por período" (Mes/Año, ◀ / ▶, arranca en el período actual), pero sobre la serie de ganancia neta (`revenue - inversión`) en vez de inversión.
+3. **Actividades por período** (nueva en v7): mismo componente y navegación, pero graficando la **cantidad** de actividades cerradas por semana (vista Mes) o por mes (vista Año) — el encabezado muestra el total de actividades del período seleccionado, formateado como número entero, no como moneda.
+4. **Estado de caja chica**: si hay una caja abierta (`useCurrentCashCut`), muestra "Abierta desde [fecha de apertura]" + el monto inicial. Si no hay ninguna, estado vacío ("Sin caja abierta") con un link a `/caja-chica`. No duplica el subtotal real/ganancia en vivo (eso ya vive en `/caja-chica`).
+5. **Actividades abiertas**: cantidad de actividades con `status = 'open'`, y de esas, nombre y antigüedad en días (`max(0, now() - created_at)`, nunca negativa) de la más antigua, en líneas separadas (etiqueta "Abierta hace más tiempo" / nombre / "N día(s) abierta" o "Abierta hoy" si `daysOpen === 0`). Si no hay ninguna abierta, estado vacío ("No hay actividades abiertas").
+6. **Inversión: mes actual vs. anterior**: dos montos (mes en curso y mes calendario anterior) + variación porcentual, con un indicador visual (par de barras comparativas cortas + flecha de tendencia ↑/↓ coloreada según el signo). Si el mes anterior fue `0` y el actual no, la variación se muestra como "+100%" en vez de dividir por cero; si ambos son `0`, se muestra "0%" sin signo ni flecha.
+7. **Ganancia acumulada histórica** (nueva en v7): `Σ (revenue - unit_price*sold_qty)` de TODAS las actividades cerradas, sin filtro de mes — número grande + la inversión histórica equivalente como referencia secundaria.
+8. **Margen promedio** (nueva en v7): `Σganancia histórica / Σinversión histórica * 100`, mostrado como porcentaje. `0%` si no hay inversión histórica todavía (evita dividir por cero).
+9. **Ranking de zonas (mes actual)** (nueva en v7): ganancia neta agrupada por zona de las actividades cerradas en el mes en curso, como ranking de barras horizontales (máx. 5, ordenado de mayor a menor), barra proporcional a la zona líder. Si no hay actividades cerradas este mes, estado vacío ("Todavía no hay actividades cerradas este mes").
+10. **Historial de cajas cerradas** (nueva en v7): lista de hasta 5 cajas cerradas más recientes — número de caja (`sequenceNumber`), fecha de cierre y ganancia (`totalProfit`) de cada una. Si no hay ninguna cerrada, estado vacío ("Todavía no hay cajas cerradas").
 
-### Rediseño de "Productos con stock bajo" (v1)
-La tarjeta original de v0 (conteo + lista de texto plano) se reemplaza por una lista con una mini barra de progreso por producto (`stock` actual sobre `LOW_STOCK_THRESHOLD`), para que la severidad se lea de un vistazo sin ser un gráfico completo:
-- Color **rojo** cuando `stock === 0` o `stock / LOW_STOCK_THRESHOLD < 0.34`; **ámbar** en el resto de los casos (todos los productos listados ya están por debajo del umbral, así que la diferencia de color solo distingue "crítico" de "bajo").
-- Se sigue mostrando el conteo total arriba y como máximo 5 productos, mismo criterio que v0.
+No se agregan métricas fuera de esta lista (ej. costo/margen unitario por producto) sin confirmarlo antes con el usuario, según lo indicado en `CLAUDE.md`.
 
 ## Reglas objetivo
-- `LOW_STOCK_THRESHOLD` es una constante única definida en `src/shared/core/` (ej. `constants.ts`), reutilizada por el dashboard y por cualquier otra pantalla que necesite marcar stock bajo (ej. listado de productos) — no se hardcodea el número en más de un archivo.
-- El cálculo de "ventas del mes" y "actividad más rentable" se hace sobre actividades **cerradas** únicamente; actividades abiertas no participan de estas métricas (su venta todavía no es definitiva).
+- **"Inversión" (`Σ unit_price * sold_qty`) y "Ganancia" (`Σ (revenue - unit_price * sold_qty)`) son conceptos distintos** y ninguna tarjeta puede usar uno donde corresponde el otro — mismo criterio que `spec/caja-chica/caja-chica-feature.md` y el modal de detalle de actividad ("Monto de la inversión" / "Monto real").
+- Todas las métricas de inversión/ganancia/actividades por período, mensuales y comparativas se calculan sobre actividades **cerradas** únicamente; actividades abiertas no participan (su venta todavía no es definitiva). "Actividades abiertas" es la única tarjeta que mira `status = 'open'` a propósito.
 - El estado expandido/colapsado de la sidebar en desktop se recuerda entre sesiones (no vuelve a colapsado por defecto en cada carga).
-- Las 7 métricas nuevas de v1 siguen el mismo criterio que las de v0: "ventas", "ticket promedio" y "mes actual vs. anterior" se calculan sobre actividades **cerradas** únicamente; "actividades abiertas" es la única tarjeta que mira `status = 'open'` a propósito.
-- "Stock valorizado" y "Productos con stock bajo" comparten el mismo filtro `is_active = true`, pero son independientes entre sí — no hay una jerarquía entre ambas tarjetas.
-- Ninguna de las 7 tarjetas nuevas agrega filtros, rango de fechas ni configuración por parte del usuario en esta versión (mismo criterio que v0).
+- Ninguna tarjeta agrega filtros, rango de fechas ni configuración por parte del usuario en esta versión — "Ranking de zonas" e "Historial de cajas" no son filtrables desde el dashboard (para eso ya existe Caja Chica → Historial).
+- La antigüedad en días de una actividad abierta nunca se muestra negativa, aunque `created_at` sea posterior a "ahora" (dato inconsistente) — se acota a `0` como mínimo.
+- El dashboard no consulta la tabla `products` en esta versión (ninguna tarjeta actual la necesita); sí consulta `zonas` desde v7.
+- "Ganancia acumulada histórica" y "Margen promedio" son sobre el total histórico (sin filtro), a diferencia del resto de las tarjetas de inversión/ganancia que son mensuales o por período navegable — no deben confundirse entre sí.
 
 ## Vistas afectadas
-- **Desktop (≥ md)**: sidebar como rail fijo a la izquierda (colapsado por defecto o según preferencia guardada) + contenido principal a la derecha con las tarjetas de métricas en una grilla (ahora 10 en vez de 3).
-- **Mobile (< md)**: sidebar oculta por defecto, accesible como sheet desde un botón de menú; las tarjetas de métricas se apilan verticalmente.
-- El gráfico de "Ventas por semana" ocupa el ancho completo de su celda de grid (no se achica junto a las demás tarjetas de una sola métrica) — mismo criterio visual que un `MetricCard` normal pero con `recharts` `ResponsiveContainer` adentro en vez de texto.
+- **Desktop (≥ md)**: sidebar como rail fijo a la izquierda + contenido principal a la derecha con las 9 tarjetas de métricas en una grilla, en el orden fijo listado arriba (las tres de período primero).
+- **Mobile (< md)**: sidebar oculta por defecto, accesible como sheet desde un botón de menú; las tarjetas se apilan verticalmente, mismo orden.
+- "Inversión por período", "Ganancia por período" y "Actividades por período" ocupan el ancho completo de su celda de grid — mismo criterio visual que un `MetricCard` normal, pero con `recharts` `ResponsiveContainer` adentro en vez de texto.
 
 ## Política de estado
-- El estado expandido/colapsado y la apertura del sheet mobile los maneja internamente el propio componente `animated-sidebar` de beUI (no se duplica ese estado en un contexto propio).
-- Preferencia de expandido/colapsado persistida en localStorage (clave a definir, ej. `peluchera_stock_sidebar_state`).
-- Las métricas del dashboard se obtienen vía TanStack Query (`useDashboardMetrics` en `features/dashboard/hooks/`), sin estado local propio más allá del que maneje la query (loading/error/data). Las 7 métricas nuevas de v1 se agregan al mismo objeto `DashboardMetrics` y a la misma query (`queryKey: ['dashboard', 'metrics']`) — no se crean queries nuevas por tarjeta, para no multiplicar round-trips a Supabase en una misma pantalla.
-- La tarjeta "Estado de caja chica" es la única excepción: reutiliza el hook ya existente `useCurrentCashCut` (`features/caja-chica/hooks/`) en vez de traer ese dato en `useDashboardMetrics`, porque ya existe y ya está cacheado bajo `['cash-cuts', 'current']`.
+- El estado expandido/colapsado y la apertura del sheet mobile los maneja internamente el propio componente `animated-sidebar` de beUI (no se duplica ese estado en un contexto propio). Persistido en localStorage (`peluchera_stock_sidebar_state`).
+- Las métricas del dashboard se obtienen vía TanStack Query (`useDashboardMetrics` en `features/dashboard/hooks/`), una sola query (`queryKey: ['dashboard', 'metrics']`) que alimenta todas las tarjetas salvo "Estado de caja chica" e "Historial de cajas cerradas" — no se crean queries nuevas por tarjeta más allá de las ya existentes que se reutilizan.
+- "Estado de caja chica" reutiliza `useCurrentCashCut` (`features/caja-chica/hooks/`, `queryKey: ['cash-cuts', 'current']`).
+- "Historial de cajas cerradas" reutiliza `useCashCuts` (`features/caja-chica/hooks/`, `queryKey: ['cash-cuts', 'history']`) — mismo hook que ya usa la pestaña "Caja Chica" de `/caja-chica`, sin duplicar esa data en el dashboard.
+- "Inversión por período", "Ganancia por período" y "Actividades por período" comparten el mismo componente genérico `PeriodChartCard` (`src/features/dashboard/components/PeriodChartCard.tsx`), que recibe un array `{ date, amount }[]` y un `formatValue` opcional (default `formatCurrency`), y maneja su propia navegación de cursor mes/año como estado local (no en la query) — cambiar de período no dispara ningún fetch nuevo.
 
 ## Contratos de datos
-- Constante: `src/shared/core/constants.ts` → `LOW_STOCK_THRESHOLD` (número, valor a definir con el usuario si no hay uno ya acordado; placeholder `5`).
-- Hook de datos: `src/features/dashboard/hooks/useDashboardMetrics.ts` — una query que combina:
-  - `activities` (`status = 'closed'`) + `activity_products` (para monto real vendido por actividad, por mes, por semana y por producto).
-  - `activities` (`status = 'open'`) para la tarjeta de actividades abiertas.
-  - `products` (para contar/listar los de `stock < LOW_STOCK_THRESHOLD` y para el stock valorizado de productos activos).
-- `DashboardMetrics` (tipo devuelto por `fetchDashboardMetrics`) se extiende con:
+- Hook de datos: `src/features/dashboard/hooks/useDashboardMetrics.ts` → `fetchDashboardMetrics` (`src/features/dashboard/hooks/api.ts`) combina:
+  - `activities` (`status = 'closed'`) + `revenue` + `zona_id` + `activity_products(unit_price, sold_qty)` (para inversión/ganancia/cantidad por actividad, por mes, por período y por zona).
+  - `activities` (`status = 'open'`, `name`, `created_at`) para "Actividades abiertas".
+  - `zonas` (`id`, `name`) para nombrar el ranking de zonas.
+- `DashboardMetrics` (tipo devuelto por `fetchDashboardMetrics`):
   ```ts
   {
-    // ...campos v0 sin cambios...
-    salesHistory: { date: string; amount: number }[] // una entrada por día con ventas, agrupa todas las actividades cerradas ese día
-    topProducts: { id: string; name: string; soldQty: number }[] // máx. 5
+    investmentHistory: { date: string; amount: number }[] // fuente de "Inversión por período"
+    profitHistory: { date: string; amount: number }[] // fuente de "Ganancia por período"
+    activitiesHistory: { date: string; amount: number }[] // fuente de "Actividades por período" (amount = conteo)
     openActivities: { count: number; oldest: { name: string; daysOpen: number } | null }
-    salesComparison: { currentMonth: number; previousMonth: number; percentChange: number }
-    averageTicket: number | null // null si no hay actividades cerradas
-    inventoryValue: number
+    investmentComparison: { currentMonth: number; previousMonth: number; percentChange: number }
+    allTime: { investment: number; profit: number } // sin filtro de mes
+    averageMarginPercent: number // allTime.profit / allTime.investment * 100, 0 si no hay inversión
+    zoneRanking: { zonaId: number; zoneName: string; profit: number }[] // mes actual, máx. 5, desc
   }
   ```
-  `salesHistory` es la única fuente de datos de la tarjeta "Ventas por período" — la navegación entre meses/años y el desglose por semana/mes se calculan 100% en el cliente (`src/features/dashboard/utils/salesPeriods.ts`) a partir de este array, sin volver a pedirle datos a Supabase al navegar (evita un round-trip por cada click en ◀ / ▶).
-- Requiere que existan en Supabase las tablas `products`, `activities` y `activity_products` según el modelo de dominio de `AGENTS.md` sección 3 — ya están creadas (implementadas en versiones posteriores a `v0-objective-draft`).
+  `investmentHistory`/`profitHistory`/`activitiesHistory` son la única fuente de datos de sus tarjetas de período — la navegación entre meses/años y el desglose por semana/mes se calculan 100% en el cliente (`src/features/dashboard/utils/periodBreakdown.ts`, funciones genéricas sobre `{ date, amount }[]`), sin volver a pedirle datos a Supabase al navegar.
+- Requiere que existan en Supabase las tablas `activities`, `activity_products` y `zonas` según `AGENTS.md` sección 3 — ya están creadas.
 
 ## Persistencia
-- Preferencia de sidebar (expandido/colapsado): localStorage, no crítico, se puede perder sin afectar el negocio.
+- Preferencia de sidebar (expandido/colapsado): localStorage, no crítico.
 - Métricas del dashboard: no se persisten en cliente, se recalculan en cada carga vía Supabase (cacheadas por TanStack Query según su configuración estándar).
 
 ## Errores esperados y recuperación
-- Falla la carga de métricas (error de red/Supabase): la vista muestra un estado de error por tarjeta con opción de reintentar, sin romper el resto del dashboard. Como las 7 tarjetas nuevas comparten query con las 3 originales, un error afecta a las 10 a la vez (excepto "Estado de caja chica", que depende de su propio hook).
-- No hay actividades cerradas todavía: "Ventas del mes" muestra `$0`, "Actividad más rentable", "Productos más vendidos" y "Ticket promedio" muestran estado vacío; "Ventas por semana" muestra las 6 barras en `0`; "Mes actual vs. anterior" muestra `$0` en ambos con variación `0%`.
-- No hay productos con stock bajo: la tarjeta correspondiente muestra un estado positivo ("Todo el stock está en niveles saludables") en vez de una lista vacía.
-- No hay actividades abiertas: "Actividades abiertas" muestra estado vacío ("No hay actividades abiertas").
-- No hay caja abierta: "Estado de caja chica" muestra "Sin caja abierta" + link a `/caja-chica`.
+- Falla la carga de métricas (error de red/Supabase): la vista muestra un estado de error por tarjeta con opción de reintentar, sin romper el resto del dashboard. Como 7 de las 9 tarjetas comparten la query de `useDashboardMetrics`, un error las afecta a todas a la vez (excepto "Estado de caja chica" e "Historial de cajas cerradas", que dependen de sus propios hooks).
+- No hay actividades cerradas todavía: "Inversión/Ganancia/Actividades por período" muestran sus barras y su total en `0`; "Inversión: mes actual vs. anterior" muestra `$0` en ambos con variación `0%`; "Ganancia acumulada histórica" muestra `$0`; "Margen promedio" muestra `0%`; "Ranking de zonas" muestra su estado vacío.
+- No hay actividades cerradas este mes (pero sí históricamente): "Ranking de zonas" muestra su estado vacío aunque "Ganancia acumulada histórica"/"Margen promedio" tengan datos.
+- No hay actividades abiertas: estado vacío ("No hay actividades abiertas").
+- No hay caja abierta: "Sin caja abierta" + link a `/caja-chica`.
+- No hay cajas cerradas todavía: "Historial de cajas cerradas" muestra su estado vacío.
 
 ## Navegación relevante
-- `src/app/routes.tsx` pasa a anidar las rutas protegidas dentro de un layout de la app (ej. `AppLayout`) que renderiza la sidebar + un `<Outlet />`:
-  - `/` → Dashboard (esta spec).
-  - `/productos`, `/actividades`, `/perfil` → placeholders hasta que existan sus propias specs.
-- `AuthGuard` sigue siendo quien decide si se entra al layout protegido o se redirige a `/login`; no cambia su lógica, solo pasa a envolver al `AppLayout` en vez de a la ruta `/` directamente.
+- `src/app/routes.tsx` anida las rutas protegidas dentro de `AppLayout`, que renderiza la sidebar + un `<Outlet />`. `AuthGuard` decide si se entra al layout protegido o se redirige a `/login`.
 
 ## Profundidad en Supabase
-- No aplica todavía: esta versión asume que `products`, `activities` y `activity_products` existen con la forma descrita en `AGENTS.md`. La creación de esas tablas y sus políticas RLS se documentará en las specs de Productos y Actividades respectivamente, no en esta.
-- Si el cálculo de "actividad más rentable" resulta costoso de hacer en el cliente a medida que crezcan los datos, evaluar moverlo a una función/RPC de Postgres — no implementarlo así de entrada sin necesidad confirmada.
+- Esta versión asume que `activities`, `activity_products` y `zonas` ya existen con la forma descrita en `AGENTS.md`.
+- Si el cálculo de métricas resulta costoso de hacer en el cliente a medida que crezcan los datos, evaluar moverlo a una función/RPC de Postgres — no implementarlo así de entrada sin necesidad confirmada.
 
 ## Brechas detectadas en la implementación actual
-- v0 (shell + 3 métricas originales) ya está implementada: `src/app/AppLayout.tsx`, `src/app/routes.tsx` y `src/features/dashboard/` existen y funcionan.
-- Las 7 métricas nuevas de v1 son las que agrega esta versión — antes de implementarlas, `useDashboardMetrics`/`fetchDashboardMetrics` solo devuelven `salesThisMonth`, `topActivity`, `lowStockCount` y `lowStockProducts`.
+- Ninguna: v7 (incluyendo las correcciones de v2-v6) ya está implementada en el código a la fecha de esta versión de la spec.
 
 ## Criterios de aceptación
-- Cualquier ruta protegida (`/`, `/productos`, `/actividades`, `/perfil`) muestra la sidebar; `/login` no la muestra.
+- Cualquier ruta protegida (`/`, `/productos`, `/actividades`, `/caja-chica`, `/perfil`) muestra la sidebar; `/login` no la muestra.
 - En desktop, la sidebar se puede colapsar/expandir y ese estado sigue igual después de recargar la página.
 - En mobile, la sidebar no ocupa espacio fijo y se abre/cierra como sheet desde un botón de menú.
-- En `/`, con al menos una actividad cerrada este mes, "Ventas del mes" muestra la suma correcta de `unit_price * sold_qty` de esas actividades.
-- En `/`, la actividad cerrada con mayor monto real vendido aparece como "más rentable"; si hay empate, se acepta mostrar cualquiera de las empatadas (no hay regla de desempate en esta versión).
-- En `/`, los productos con `stock < LOW_STOCK_THRESHOLD` aparecen listados (máx. 5) y el conteo total es correcto.
-- Ningún archivo del dashboard ni de la sidebar hardcodea el valor de `LOW_STOCK_THRESHOLD` fuera de `src/shared/core/constants.ts`.
+- En `/`, "Inversión por período", "Ganancia por período" y "Actividades por período" son las tres primeras tarjetas, en ese orden.
+- "Actividades por período" muestra un conteo entero (sin símbolo de moneda) en su encabezado y en el tooltip del gráfico.
 - Con una caja abierta, "Estado de caja chica" muestra su fecha de apertura y monto inicial; sin caja abierta, muestra el estado vacío con link a `/caja-chica`.
-- "Ventas por período" arranca en el mes/año actual; navegar con ◀ cambia de período y actualiza el total y el desglose; ▶ está deshabilitado en el mes/año en curso (no se puede ir a futuro).
-- Dentro de la sub-pestaña "Mes", el desglose por semana solo incluye las semanas que caen dentro del mes seleccionado.
-- "Productos más vendidos" lista hasta 5 productos ordenados por `sold_qty` acumulado descendente, con barra proporcional al primero del ranking.
-- "Productos con stock bajo" muestra una barra de progreso por producto, en rojo si `stock === 0` o `stock / LOW_STOCK_THRESHOLD < 0.34`, ámbar en el resto.
-- "Actividades abiertas" muestra el conteo correcto de `status = 'open'` y, si hay al menos una, la más antigua por `created_at`.
-- "Mes actual vs. anterior" no divide por cero cuando el mes anterior es `0`.
-- "Ticket promedio" es `totalVendido / cantidadActividadesCerradas`, `null`/estado vacío si no hay ninguna.
-- "Stock valorizado" suma `stock * price` solo de productos con `is_active = true`.
+- Las tres tarjetas de período arrancan en el mes/año actual; navegar con ◀ cambia de período y actualiza el total y el desglose; ▶ está deshabilitado en el mes/año en curso.
+- Dentro de la sub-pestaña "Mes" (en cualquiera de las tres tarjetas de período), el desglose por semana solo incluye las semanas que caen dentro del mes seleccionado.
+- "Actividades abiertas" muestra el conteo correcto de `status = 'open'` y, si hay al menos una, la más antigua por `created_at`, con antigüedad nunca negativa (mínimo `0`, mostrado como "Abierta hoy").
+- "Inversión: mes actual vs. anterior" no divide por cero cuando el mes anterior es `0`.
+- "Ganancia acumulada histórica" y "Margen promedio" no filtran por mes — reflejan el histórico completo.
+- "Margen promedio" no divide por cero cuando la inversión histórica es `0`.
+- "Ranking de zonas" ordena de mayor a menor ganancia y muestra máx. 5 zonas del mes en curso, con barra proporcional a la primera.
+- "Historial de cajas cerradas" muestra hasta 5 cajas, ordenadas de la más reciente a la más antigua (mismo orden que ya devuelve `useCashCuts`).
+- Ninguna tarjeta de "Inversión" muestra un valor que en realidad sea ganancia, ni viceversa.
+- No existen en el dashboard las tarjetas "Actividad más rentable", "Ticket promedio por actividad" (eliminadas en v3), "Stock valorizado" (eliminada en v4), "Productos con stock bajo", "Productos más vendidos" (eliminadas en v5), ni "Inversión del mes"/"Ganancia del mes" (eliminadas en v6).
 
 ## Preguntas abiertas
-- ¿Cuál es el valor definitivo de `LOW_STOCK_THRESHOLD`? Se usa `5` como placeholder hasta confirmarlo.
+- Ninguna pendiente en esta versión.

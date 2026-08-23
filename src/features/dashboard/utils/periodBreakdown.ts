@@ -13,27 +13,26 @@ import {
   startOfYear,
 } from 'date-fns'
 import { es } from 'date-fns/locale'
-import type { DashboardMetrics } from '../hooks/api'
 
-export type SalesHistoryEntry = DashboardMetrics['salesHistory'][number]
+export type PeriodHistoryEntry = { date: string; amount: number }
 export type PeriodBar = { label: string; amount: number }
 
-function amountInInterval(history: SalesHistoryEntry[], start: Date, end: Date): number {
+function amountInInterval(history: PeriodHistoryEntry[], start: Date, end: Date): number {
   return history.reduce((sum, entry) => {
     const date = new Date(`${entry.date}T00:00:00`)
     return isWithinInterval(date, { start, end }) ? sum + entry.amount : sum
   }, 0)
 }
 
-export function monthTotal(history: SalesHistoryEntry[], cursor: Date): number {
+export function monthTotal(history: PeriodHistoryEntry[], cursor: Date): number {
   return amountInInterval(history, startOfMonth(cursor), endOfMonth(cursor))
 }
 
-export function yearTotal(history: SalesHistoryEntry[], cursor: Date): number {
+export function yearTotal(history: PeriodHistoryEntry[], cursor: Date): number {
   return amountInInterval(history, startOfYear(cursor), endOfYear(cursor))
 }
 
-export function weeklyBreakdownForMonth(history: SalesHistoryEntry[], cursor: Date): PeriodBar[] {
+export function weeklyBreakdownForMonth(history: PeriodHistoryEntry[], cursor: Date): PeriodBar[] {
   const monthStart = startOfMonth(cursor)
   const monthEnd = endOfMonth(cursor)
   const weekStarts = eachWeekOfInterval(
@@ -52,7 +51,7 @@ export function weeklyBreakdownForMonth(history: SalesHistoryEntry[], cursor: Da
   })
 }
 
-export function monthlyBreakdownForYear(history: SalesHistoryEntry[], cursor: Date): PeriodBar[] {
+export function monthlyBreakdownForYear(history: PeriodHistoryEntry[], cursor: Date): PeriodBar[] {
   const yearStart = startOfYear(cursor)
   const yearEnd = endOfYear(cursor)
   const monthStarts = eachMonthOfInterval({ start: yearStart, end: yearEnd })

@@ -187,6 +187,54 @@ export async function fetchProductsByIds(ids: string[]): Promise<Product[]> {
   return (data ?? []).map(toProduct)
 }
 
+export interface ClosedActivityForImport {
+  id: string
+  name: string
+  closedAt: string | null
+  zonaId: number
+}
+
+/** Actividades cerradas para buscar en el importador de "Importar de actividad cerrada" (solo datos generales, sin líneas). */
+export async function fetchClosedActivitiesForImport(
+  search: string,
+): Promise<ClosedActivityForImport[]> {
+  let query = supabase
+    .from('activities')
+    .select('id, name, closed_at, zona_id')
+    .eq('status', 'closed')
+    .order('closed_at', { ascending: false })
+    .limit(20)
+
+  const normalizedSearch = search.trim()
+  if (normalizedSearch) {
+    query = query.ilike('name', `%${normalizedSearch}%`)
+  }
+
+  const { data, error } = await query
+  if (error) throw error
+  return (data ?? []).map((row) => ({
+    id: row.id,
+    name: row.name,
+    closedAt: row.closed_at,
+    zonaId: row.zona_id,
+  }))
+}
+
+/** Líneas con sobrante (`initial_qty - sold_qty`, excluyendo las líneas en 0) de una actividad cerrada puntual, para la vista previa del importador. */
+export async function fetchClosedActivityLeftoverLines(
+  activityId: string,
+): Promise<ActivityProductLine[]> {
+  const { data, error } = await supabase
+    .from('activity_products')
+    .select('*')
+    .eq('activity_id', activityId)
+
+  if (error) throw error
+  return (data ?? [])
+    .map(toLine)
+    .filter((line) => line.initialQty - line.soldQty > 0)
+}
+
 export async function createActivity(input: ActivityInput): Promise<Activity> {
   const { data: activityId, error } = await supabase.rpc('create_activity', {
     p_name: input.name,

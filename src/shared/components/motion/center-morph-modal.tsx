@@ -156,6 +156,8 @@ export interface CenterMorphModalContentProps {
   /** Render the close control inside the panel's top-right corner. Default true. */
   showCloseButton?: boolean;
   closeButtonLabel?: string;
+  /** Move focus to the first focusable element on open. Default true; set false to focus the panel itself instead. */
+  autoFocus?: boolean;
   className?: string;
   backdropClassName?: string;
 }
@@ -204,6 +206,7 @@ export function CenterMorphModalContent({
   dismissible = true,
   showCloseButton = true,
   closeButtonLabel = "Close modal",
+  autoFocus = true,
   className,
   backdropClassName,
 }: CenterMorphModalContentProps) {
@@ -223,6 +226,10 @@ export function CenterMorphModalContent({
     document.body.style.overflow = "hidden";
 
     const focusFrame = requestAnimationFrame(() => {
+      if (!autoFocus) {
+        panelRef.current?.focus();
+        return;
+      }
       const [firstFocusable] = getFocusableElements(overlayRef.current);
       (firstFocusable ?? panelRef.current)?.focus();
     });
@@ -260,7 +267,7 @@ export function CenterMorphModalContent({
       document.body.style.overflow = previousOverflow;
       document.getElementById(context.triggerId)?.focus();
     };
-  }, [context, dismissible]);
+  }, [context, dismissible, autoFocus]);
 
   if (!mounted) return null;
 

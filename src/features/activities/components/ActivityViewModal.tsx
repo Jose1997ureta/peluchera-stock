@@ -122,6 +122,8 @@ export function ActivityViewModal({
     : lines
 
   const isClosed = activity?.status === 'closed'
+  const totalQty = lines.reduce((sum, line) => sum + line.initialQty, 0)
+  const soldQtyTotal = lines.reduce((sum, line) => sum + line.soldQty, 0)
   const estimatedTotal = lines.reduce(
     (sum, line) => sum + line.unitPrice * line.initialQty,
     0,
@@ -231,6 +233,7 @@ export function ActivityViewModal({
       <CenterMorphModal open={open} onOpenChange={handleOpenChange}>
         <CenterMorphModalContent
           ariaLabel="Ver actividad"
+          autoFocus={false}
           className="max-w-2xl"
         >
           <div className="flex max-h-[85vh] flex-col p-6">
@@ -262,7 +265,7 @@ export function ActivityViewModal({
                   </div>
                 </div>
 
-                <div className="-mx-1 mt-4 flex flex-1 flex-col gap-2 overflow-y-auto p-1">
+                <div className="-mx-1 mt-4 flex min-h-0 flex-1 flex-col gap-2 p-1">
                   {lines.length > 0 ? (
                     <div className="relative w-full sm:max-w-xs">
                       <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
@@ -285,6 +288,7 @@ export function ActivityViewModal({
                     </div>
                   ) : null}
 
+                  <div className="-mx-1 min-h-0 flex-1 overflow-y-auto p-1 md:mx-0 md:flex-none md:overflow-visible md:p-0">
                   {isLoadingLines ? (
                     <p className="text-sm text-muted-foreground">
                       Cargando productos de la actividad...
@@ -376,52 +380,90 @@ export function ActivityViewModal({
                   )}
 
                   {lines.length > 0 ? (
-                    <div className="flex flex-col gap-1 rounded-lg bg-muted px-3 py-2.5">
+                    <>
                       {isClosed ? (
-                        <>
+                        <div className="mt-3 flex flex-col gap-1 rounded-lg bg-muted px-3 py-2.5">
                           <div className="flex items-center justify-between">
                             <span className="text-sm font-medium text-foreground">
-                              Ingreso
+                              Cantidad de productos
                             </span>
                             <span className="text-sm font-semibold tabular-nums text-foreground">
-                              {formatCurrency(revenueTotal)}
+                              {totalQty}
                             </span>
                           </div>
                           <div className="flex items-center justify-between">
                             <span className="text-sm font-medium text-foreground">
-                              Monto de la inversión
+                              Cantidad de productos vendidos
                             </span>
                             <span className="text-sm font-semibold tabular-nums text-foreground">
-                              {formatCurrency(investedTotal)}
+                              {soldQtyTotal}
                             </span>
                           </div>
-                          <div className="mt-1 flex items-center justify-between border-t border-border pt-2">
-                            <span className="text-base font-semibold text-foreground">
-                              Monto real
-                            </span>
-                            <span
-                              className={`text-lg font-bold tabular-nums ${
-                                realTotal >= 0
-                                  ? 'text-emerald-600'
-                                  : 'text-destructive'
-                              }`}
-                            >
-                              {formatCurrency(realTotal)}
-                            </span>
-                          </div>
-                        </>
-                      ) : (
-                        <div className="flex items-center justify-between">
-                          <span className="text-sm font-medium text-foreground">
-                            Monto estimado de venta
-                          </span>
-                          <span className="text-sm font-semibold tabular-nums text-foreground">
-                            {formatCurrency(estimatedTotal)}
-                          </span>
                         </div>
-                      )}
-                    </div>
+                      ) : null}
+
+                      <div
+                        className={`flex flex-col gap-1 rounded-lg bg-muted px-3 py-2.5 ${
+                          isClosed ? 'mt-2' : 'mt-3'
+                        }`}
+                      >
+                        {isClosed ? (
+                          <>
+                            <div className="flex items-center justify-between">
+                              <span className="text-sm font-medium text-foreground">
+                                Ingreso
+                              </span>
+                              <span className="text-sm font-semibold tabular-nums text-foreground">
+                                {formatCurrency(revenueTotal)}
+                              </span>
+                            </div>
+                            <div className="flex items-center justify-between">
+                              <span className="text-sm font-medium text-foreground">
+                                Monto de la inversión
+                              </span>
+                              <span className="text-sm font-semibold tabular-nums text-foreground">
+                                {formatCurrency(investedTotal)}
+                              </span>
+                            </div>
+                            <div className="mt-1 flex items-center justify-between border-t border-border pt-2">
+                              <span className="text-base font-semibold text-foreground">
+                                Monto real
+                              </span>
+                              <span
+                                className={`text-lg font-bold tabular-nums ${
+                                  realTotal >= 0
+                                    ? 'text-emerald-600'
+                                    : 'text-destructive'
+                                }`}
+                              >
+                                {formatCurrency(realTotal)}
+                              </span>
+                            </div>
+                          </>
+                        ) : (
+                          <>
+                            <div className="flex items-center justify-between">
+                              <span className="text-sm font-medium text-foreground">
+                                Cantidad
+                              </span>
+                              <span className="text-sm font-semibold tabular-nums text-foreground">
+                                {totalQty}
+                              </span>
+                            </div>
+                            <div className="flex items-center justify-between">
+                              <span className="text-sm font-medium text-foreground">
+                                Monto estimado de venta
+                              </span>
+                              <span className="text-sm font-semibold tabular-nums text-foreground">
+                                {formatCurrency(estimatedTotal)}
+                              </span>
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    </>
                   ) : null}
+                  </div>
                 </div>
 
                 <div className="mt-6 flex justify-end">
