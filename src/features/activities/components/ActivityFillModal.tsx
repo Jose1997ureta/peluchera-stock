@@ -10,13 +10,6 @@ import { Button } from '@/shared/components/ui/button'
 import { Card, CardContent } from '@/shared/components/ui/card'
 import { Input } from '@/shared/components/ui/input'
 import { Label } from '@/shared/components/ui/label'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/shared/components/motion/select'
 import { toast } from '@/shared/lib/toast'
 import type { Activity } from '@/shared/types/activity'
 import type { Product } from '@/shared/types/product'
@@ -333,25 +326,24 @@ export function ActivityFillModal({
 
           <div className="-mx-1 mt-4 flex min-h-0 flex-1 flex-col gap-6 p-1 md:grid md:grid-cols-7 md:gap-8">
             <div className="flex flex-col gap-4 md:col-span-2">
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="fill-name">Nombre</Label>
-                <Input id="fill-name" value={activity?.name ?? ''} disabled />
+              <div className="flex min-w-0 items-baseline gap-1.5">
+                <span className="shrink-0 text-sm font-medium text-muted-foreground">
+                  Nombre:
+                </span>
+                <span className="truncate text-sm text-foreground">
+                  {activity?.name ?? '—'}
+                </span>
               </div>
 
-              <div className="flex flex-col gap-1.5">
-                <Label>Zona</Label>
-                <Select value={activity ? String(activity.zonaId) : undefined} disabled>
-                  <SelectTrigger>
-                    <SelectValue placeholder="—" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {(zonas ?? []).map((zone) => (
-                      <SelectItem key={zone.id} value={String(zone.id)}>
-                        {zone.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+              <div className="flex min-w-0 items-baseline gap-1.5">
+                <span className="shrink-0 text-sm font-medium text-muted-foreground">
+                  Zona:
+                </span>
+                <span className="truncate text-sm text-foreground">
+                  {(zonas ?? []).find(
+                    (zone) => activity && String(zone.id) === String(activity.zonaId),
+                  )?.name ?? '—'}
+                </span>
               </div>
 
               <div className="flex flex-col gap-1.5">
@@ -466,15 +458,6 @@ export function ActivityFillModal({
                                 aria-invalid={qtyError !== undefined}
                                 className="ml-auto w-20 px-1.5 text-right"
                               />
-
-                              <span className="text-muted-foreground">
-                                Subtotal real
-                              </span>
-                              <span className="text-right tabular-nums">
-                                {formatCurrency(
-                                  row.unitPrice * (Number(row.soldQty) || 0),
-                                )}
-                              </span>
                             </div>
                           </CardContent>
                         </Card>
