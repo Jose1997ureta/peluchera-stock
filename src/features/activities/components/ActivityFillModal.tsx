@@ -335,7 +335,7 @@ export function ActivityFillModal({
                 </span>
               </div>
 
-              <div className="flex min-w-0 items-baseline gap-1.5">
+              <div className="hidden min-w-0 items-baseline gap-1.5 md:flex">
                 <span className="shrink-0 text-sm font-medium text-muted-foreground">
                   Zona:
                 </span>
