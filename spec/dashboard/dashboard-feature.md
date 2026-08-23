@@ -1,7 +1,7 @@
 # Dashboard Feature
 
 ## Versión
-v7-metricas-adicionales
+v8-bottom-nav-mobile
 
 > **Nota sobre v0:** el shell de navegación (sidebar animado) ya está implementado tal cual describía `v0-objective-draft`. Las métricas originales de v0 fueron reemplazadas/renombradas/eliminadas por versiones posteriores — esta spec ya no describe la v0 de las tarjetas de métricas, solo el shell.
 >
@@ -21,20 +21,21 @@ v7-metricas-adicionales
 > - **"Margen promedio"**: `gananciaHistórica / inversiónHistórica * 100`, `0` si no hay inversión — una lectura de rentabilidad relativa que hasta ahora no existía (todo lo demás son montos absolutos).
 > - **"Ranking de zonas (mes actual)"**: ganancia neta agrupada por `zona_id` de las actividades cerradas este mes, como ranking de barras horizontales (mismo patrón visual que la vieja "Productos más vendidos"). Requiere la tabla `zonas` (ya usada en Caja Chica → Historial).
 > - **"Historial de cajas cerradas"**: lista de hasta 5 cajas cerradas más recientes (número de caja + fecha de cierre + ganancia), reutilizando el hook `useCashCuts` ya existente de Caja Chica (`queryKey: ['cash-cuts', 'history']`) en vez de duplicar esa data en `useDashboardMetrics`.
+>
+> **Nota sobre v8 — navegación mobile pasa de sheet lateral a bottom nav:** en mobile (`< md`), el menú lateral (sheet de `animated-sidebar`) se reemplaza por un `Dock` de beUI fijo en la parte inferior de la pantalla, con los mismos 4 ítems de nivel superior + Perfil (5 en total). El trigger que abría el sheet mobile se oculta en `< md` (sigue visible en desktop para el rail). Además, el header de título de página pasa a `sticky top-0` en todos los breakpoints (antes scrolleaba junto con el contenido en mobile).
 
 ## Objetivo
 Dar a la app un shell de navegación único (sidebar animado de beUI) que envuelva todas las rutas protegidas, y dentro de ese shell, mostrar en la ruta `/` un dashboard enfocado en inversión, ganancia y actividad del negocio (por período navegable, del mes en curso e histórico), zonas más rentables, estado de caja chica/su historial y actividades abiertas — sin agregar filtros ni configuración en esta versión.
 
 ## Alcance objetivo
 
-### Shell de navegación (Animated Sidebar)
-- Se usa el componente `animated-sidebar` de beUI (instalado vía su MCP) como único mecanismo de navegación principal de la app — no se combina con `Dock` ni con otro patrón de navegación en esta versión.
-- Vive en `src/app/` (layout de la app, no es parte de ninguna feature) y envuelve a todas las rutas protegidas por `AuthGuard`; `/login` queda fuera del shell.
+### Shell de navegación (Animated Sidebar en desktop, Dock en mobile — desde v8)
+- Vive en `src/app/AppLayout.tsx` (layout de la app, no es parte de ninguna feature) y envuelve a todas las rutas protegidas por `AuthGuard`; `/login` queda fuera del shell.
 - Ítems de navegación de nivel superior (sin roles, todos los usuarios ven lo mismo): Dashboard → `/`, Productos → `/productos`, Actividades → `/actividades`, Caja Chica → `/caja-chica`.
-- Perfil no es un ítem más del menú: vive en el **footer** de la sidebar como una tarjeta con avatar (iniciales de `nombre`/`apellido`), nombre completo y correo del usuario logueado (`AuthContext`); al hacer click navega a `/perfil`. En desktop colapsado se ve solo el avatar.
 - El shell no incluye acción de logout en esta versión — queda documentado en la spec de Profile (ver `spec/auth/login-feature.md`, sección "Política de estado").
-- En desktop: la sidebar se pliega a un rail de iconos y se expande a nombres + iconos; el usuario puede alternar el estado con un control visible en la propia sidebar.
-- En mobile: la sidebar se comporta como un sheet (overlay) disparado desde un botón de menú en la parte superior de la pantalla; no ocupa espacio fijo del layout.
+- **Desktop (≥ md):** se usa `animated-sidebar` de beUI como único mecanismo de navegación. Se pliega a un rail de iconos y se expande a nombres + iconos; el usuario puede alternar el estado con un control visible en la propia sidebar (`AnimatedSidebarTrigger`). Perfil no es un ítem más del menú: vive en el **footer** de la sidebar como una tarjeta con avatar (iniciales de `nombre`/`apellido`), nombre completo y correo del usuario logueado (`AuthContext`); al hacer click navega a `/perfil`. En desktop colapsado se ve solo el avatar.
+- **Mobile (< md, desde v8):** el sheet mobile de `animated-sidebar` ya no se usa como navegación — `AnimatedSidebarTrigger` se oculta (`hidden md:inline-flex`), así que ese sheet nunca se abre. En su lugar, la navegación es un `Dock` de beUI (`src/shared/components/motion/dock.tsx`) fijo en `bottom-0` con `safe-area-inset-bottom`, mostrando los 4 ítems de nivel superior **más Perfil** (5 ítems en total, a diferencia de desktop donde Perfil vive en el footer de la sidebar). El ítem activo se resuelve por `location.pathname` (sin estado propio) y se resalta con una píldora animada (`layoutId`) en `bg-primary`/`text-primary-foreground` — mismo color que el botón primario de la app (ej. "Crear producto").
+- El contenido de cada página agrega `pb-24` en mobile (`md:pb-6`) para no quedar tapado por el Dock.
 
 ### Dashboard — tarjetas de métricas
 Ruta `/` muestra las siguientes tarjetas, **en este orden**, sin filtros ni rango de fechas configurable en esta versión, en un grid (`sm:grid-cols-2 lg:grid-cols-3`):
@@ -66,12 +67,12 @@ No se agregan métricas fuera de esta lista (ej. costo/margen unitario por produ
 - "Ganancia acumulada histórica" y "Margen promedio" son sobre el total histórico (sin filtro), a diferencia del resto de las tarjetas de inversión/ganancia que son mensuales o por período navegable — no deben confundirse entre sí.
 
 ## Vistas afectadas
-- **Desktop (≥ md)**: sidebar como rail fijo a la izquierda + contenido principal a la derecha con las 9 tarjetas de métricas en una grilla, en el orden fijo listado arriba (las tres de período primero).
-- **Mobile (< md)**: sidebar oculta por defecto, accesible como sheet desde un botón de menú; las tarjetas se apilan verticalmente, mismo orden.
+- **Desktop (≥ md)**: sidebar como rail fijo a la izquierda + contenido principal a la derecha con las 9 tarjetas de métricas en una grilla, en el orden fijo listado arriba (las tres de período primero). El header de título de página es `sticky top-0`.
+- **Mobile (< md)**: sin sidebar lateral (ni fija ni como sheet); navegación por `Dock` fijo en la parte inferior con 5 ítems (Dashboard, Productos, Actividades, Caja Chica, Perfil). El header de título de página es `sticky top-0` (queda visible al hacer scroll); las tarjetas se apilan verticalmente, mismo orden, con espacio inferior extra para no quedar detrás del Dock.
 - "Inversión por período", "Ganancia por período" y "Actividades por período" ocupan el ancho completo de su celda de grid — mismo criterio visual que un `MetricCard` normal, pero con `recharts` `ResponsiveContainer` adentro en vez de texto.
 
 ## Política de estado
-- El estado expandido/colapsado y la apertura del sheet mobile los maneja internamente el propio componente `animated-sidebar` de beUI (no se duplica ese estado en un contexto propio). Persistido en localStorage (`peluchera_stock_sidebar_state`).
+- El estado expandido/colapsado de la sidebar desktop lo maneja internamente el propio componente `animated-sidebar` de beUI (no se duplica ese estado en un contexto propio). Persistido en localStorage (`peluchera_stock_sidebar_state`). Ese estado ya no controla nada en mobile desde v8 (el sheet mobile de `animated-sidebar` no se usa; el `Dock` no tiene estado propio, su ítem activo se deriva de `location.pathname`).
 - Las métricas del dashboard se obtienen vía TanStack Query (`useDashboardMetrics` en `features/dashboard/hooks/`), una sola query (`queryKey: ['dashboard', 'metrics']`) que alimenta todas las tarjetas salvo "Estado de caja chica" e "Historial de cajas cerradas" — no se crean queries nuevas por tarjeta más allá de las ya existentes que se reutilizan.
 - "Estado de caja chica" reutiliza `useCurrentCashCut` (`features/caja-chica/hooks/`, `queryKey: ['cash-cuts', 'current']`).
 - "Historial de cajas cerradas" reutiliza `useCashCuts` (`features/caja-chica/hooks/`, `queryKey: ['cash-cuts', 'history']`) — mismo hook que ya usa la pestaña "Caja Chica" de `/caja-chica`, sin duplicar esa data en el dashboard.
@@ -111,19 +112,22 @@ No se agregan métricas fuera de esta lista (ej. costo/margen unitario por produ
 - No hay cajas cerradas todavía: "Historial de cajas cerradas" muestra su estado vacío.
 
 ## Navegación relevante
-- `src/app/routes.tsx` anida las rutas protegidas dentro de `AppLayout`, que renderiza la sidebar + un `<Outlet />`. `AuthGuard` decide si se entra al layout protegido o se redirige a `/login`.
+- `src/app/routes.tsx` anida las rutas protegidas dentro de `AppLayout`, que renderiza la sidebar (desktop) + el `Dock` mobile + un `<Outlet />`. `AuthGuard` decide si se entra al layout protegido o se redirige a `/login`.
+- El componente `Dock`/`DockItem` (`src/shared/components/motion/dock.tsx`) es genérico (instalado vía MCP de beUI) y no tiene lógica propia de la app — `AppLayout` es quien lo alimenta con los ítems y resuelve el activo por ruta.
 
 ## Profundidad en Supabase
 - Esta versión asume que `activities`, `activity_products` y `zonas` ya existen con la forma descrita en `AGENTS.md`.
 - Si el cálculo de métricas resulta costoso de hacer en el cliente a medida que crezcan los datos, evaluar moverlo a una función/RPC de Postgres — no implementarlo así de entrada sin necesidad confirmada.
 
 ## Brechas detectadas en la implementación actual
-- Ninguna: v7 (incluyendo las correcciones de v2-v6) ya está implementada en el código a la fecha de esta versión de la spec.
+- Ninguna: v8 (incluyendo v2-v7) ya está implementada en el código a la fecha de esta versión de la spec.
 
 ## Criterios de aceptación
-- Cualquier ruta protegida (`/`, `/productos`, `/actividades`, `/caja-chica`, `/perfil`) muestra la sidebar; `/login` no la muestra.
+- Cualquier ruta protegida (`/`, `/productos`, `/actividades`, `/caja-chica`, `/perfil`) muestra la navegación correspondiente al breakpoint (sidebar en desktop, `Dock` en mobile); `/login` no muestra ninguna.
 - En desktop, la sidebar se puede colapsar/expandir y ese estado sigue igual después de recargar la página.
-- En mobile, la sidebar no ocupa espacio fijo y se abre/cierra como sheet desde un botón de menú.
+- En mobile, no hay sidebar visible ni como sheet; el `Dock` inferior muestra 5 ítems (Dashboard, Productos, Actividades, Caja Chica, Perfil) y resalta el activo según la ruta actual.
+- El header de título de página permanece visible (`sticky top-0`) al hacer scroll, en desktop y en mobile.
+- En mobile, el contenido de la página no queda oculto detrás del `Dock` al llegar al final del scroll.
 - En `/`, "Inversión por período", "Ganancia por período" y "Actividades por período" son las tres primeras tarjetas, en ese orden.
 - "Actividades por período" muestra un conteo entero (sin símbolo de moneda) en su encabezado y en el tooltip del gráfico.
 - Con una caja abierta, "Estado de caja chica" muestra su fecha de apertura y monto inicial; sin caja abierta, muestra el estado vacío con link a `/caja-chica`.

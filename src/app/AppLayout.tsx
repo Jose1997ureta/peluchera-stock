@@ -1,4 +1,4 @@
-import { CalendarCheck, ChevronRight, LayoutDashboard, PanelLeft, Package, Wallet } from 'lucide-react'
+import { CalendarCheck, ChevronRight, LayoutDashboard, PanelLeft, Package, User, Wallet } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Outlet, useLocation, useNavigate } from 'react-router-dom'
 import {
@@ -16,6 +16,7 @@ import {
   AnimatedSidebarRail,
   AnimatedSidebarTrigger,
 } from '@/shared/components/motion/animated-sidebar'
+import { Dock, DockItem } from '@/shared/components/motion/dock'
 import { useAuth } from '@/shared/context/AuthContext'
 
 const SIDEBAR_STATE_STORAGE_KEY = 'peluchera_stock_sidebar_state'
@@ -25,6 +26,11 @@ const NAV_ITEMS = [
   { label: 'Productos', to: '/productos', icon: Package },
   { label: 'Actividades', to: '/actividades', icon: CalendarCheck },
   { label: 'Caja Chica', to: '/caja-chica', icon: Wallet },
+]
+
+const MOBILE_NAV_ITEMS = [
+  ...NAV_ITEMS,
+  { label: 'Perfil', to: '/perfil', icon: User },
 ]
 
 const PAGE_TITLES: Record<string, string> = {
@@ -126,18 +132,36 @@ export function AppLayout() {
       </AnimatedSidebar>
 
       <AnimatedSidebarInset>
-        <header className="flex h-14 shrink-0 items-center gap-3 border-b border-border px-4">
-          <AnimatedSidebarTrigger className="text-muted-foreground transition-colors hover:bg-muted hover:text-foreground">
+        <header className="sticky top-0 z-30 flex h-14 shrink-0 items-center gap-3 border-b border-border bg-background px-4">
+          <AnimatedSidebarTrigger className="hidden text-muted-foreground transition-colors hover:bg-muted hover:text-foreground md:inline-flex">
             <PanelLeft aria-hidden="true" className="size-4" />
           </AnimatedSidebarTrigger>
-          <div className="h-5 w-px bg-border" />
+          <div className="hidden h-5 w-px bg-border md:block" />
           <p className="text-sm font-medium text-foreground">{getPageTitle(location.pathname)}</p>
         </header>
 
-        <div className="min-h-0 flex-1 overflow-auto p-4 sm:p-6">
+        <div className="min-h-0 flex-1 overflow-auto p-4 pb-24 sm:p-6 md:pb-6">
           <Outlet />
         </div>
       </AnimatedSidebarInset>
+
+      <nav
+        aria-label="Navegación principal"
+        className="fixed inset-x-0 bottom-0 z-40 flex justify-center pb-[max(0.75rem,env(safe-area-inset-bottom))] md:hidden"
+      >
+        <Dock size={40}>
+          {MOBILE_NAV_ITEMS.map(({ label, to, icon: Icon }) => (
+            <DockItem
+              key={to}
+              aria-label={label}
+              active={location.pathname === to}
+              onClick={() => navigate(to)}
+            >
+              <Icon className="size-5" />
+            </DockItem>
+          ))}
+        </Dock>
+      </nav>
     </AnimatedSidebarProvider>
   )
 }
