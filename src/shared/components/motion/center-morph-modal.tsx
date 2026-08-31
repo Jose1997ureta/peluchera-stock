@@ -215,6 +215,12 @@ export function CenterMorphModalContent({
   const [mounted, setMounted] = useState(false);
   const overlayRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
+  // Keeps the focus/scroll-lock effect below from depending on the whole
+  // context object, which is recreated whenever a caller passes an inline
+  // onOpenChange — that churn used to re-run the effect on every keystroke
+  // inside the modal and yank focus to the panel, closing mobile keyboards.
+  const setOpenRef = useRef(context.setOpen);
+  setOpenRef.current = context.setOpen;
 
   // eslint-disable-next-line react-hooks/set-state-in-effect -- client-mount flag, unavailable during SSR render
   useEffect(() => setMounted(true), []);
@@ -237,7 +243,7 @@ export function CenterMorphModalContent({
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape" && dismissible) {
         event.preventDefault();
-        context.setOpen(false);
+        setOpenRef.current(false);
         return;
       }
 
@@ -267,7 +273,8 @@ export function CenterMorphModalContent({
       document.body.style.overflow = previousOverflow;
       document.getElementById(context.triggerId)?.focus();
     };
-  }, [context, dismissible, autoFocus]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally excludes `context` (see setOpenRef above); triggerId/open are the only primitives that matter for re-running this effect
+  }, [context.open, context.triggerId, dismissible, autoFocus]);
 
   if (!mounted) return null;
 
