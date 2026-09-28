@@ -1,5 +1,5 @@
 import { useFormik } from 'formik'
-import { Search, Trash2, X } from 'lucide-react'
+import { Download, Search, Trash2, X } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import {
   CenterMorphModal,
@@ -33,6 +33,7 @@ import {
 } from '../schemas/activity.schema'
 import { ActivityImportModal } from './ActivityImportModal'
 import { ActivityProductThumbnail } from './ActivityProductThumbnail'
+import { QtyStepper } from './QtyStepper'
 import { ProductPicker } from './ProductPicker'
 
 const ROW_HEIGHT = 56
@@ -185,6 +186,22 @@ export function ActivityFormModal({
   )
 
   function handleSelectProduct(product: Product) {
+    const existingIndex = formik.values.products.findIndex(
+      (line) => line.productId === product.id,
+    )
+    if (existingIndex !== -1) {
+      const line = formik.values.products[existingIndex]
+      const nextQty = (Number(line.initialQty) || 0) + 1
+      if (nextQty > line.maxQty) {
+        toast.error(
+          `"${line.productName}": la cantidad supera el stock disponible (máx. ${line.maxQty}).`,
+        )
+        return
+      }
+      handleQtyChange(existingIndex, String(nextQty))
+      return
+    }
+
     const next: ActivityLineFormValues = {
       productId: product.id,
       productName: product.name,
@@ -302,17 +319,15 @@ export function ActivityFormModal({
               <Label htmlFor={`qty-${row.productId}`} className="sr-only">
                 Cantidad
               </Label>
-              <Input
+              <QtyStepper
                 id={`qty-${row.productId}`}
-                type="number"
-                step="1"
-                min="1"
+                min={1}
                 max={row.maxQty}
                 value={row.initialQty}
-                onChange={(event) => handleQtyChange(index, event.target.value)}
+                onChange={(value) => handleQtyChange(index, value)}
                 onBlur={() => handleQtyBlur(row)}
-                aria-invalid={qtyError !== undefined}
-                className="w-14 px-1.5"
+                invalid={qtyError !== undefined}
+                className="ml-auto w-20"
               />
             </>
           )
@@ -424,51 +439,71 @@ export function ActivityFormModal({
                   </SelectContent>
                 </Select>
               </div>
+
+              <div className="flex gap-2 pt-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="flex-1"
+                  disabled={isSaving}
+                  onClick={handleRequestClose}
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  type="submit"
+                  className="flex-1"
+                  disabled={isSaving || isLoadingLines}
+                >
+                  {isEditing ? 'Guardar cambios' : 'Registrar'}
+                </Button>
+              </div>
             </div>
 
             <div className="flex min-h-0 flex-1 flex-col gap-2 md:col-span-5 md:flex-none">
               <Label>Productos</Label>
 
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+              <div className="flex items-center gap-2">
                 <div className="min-w-0 flex-1">
                   <ProductPicker
-                    excludeProductIds={selectedProductIds}
+                    selectedProductIds={selectedProductIds}
                     onSelect={handleSelectProduct}
                   />
                 </div>
+                {formik.values.products.length > 0 ? (
+                  <div className="relative min-w-0 flex-1 sm:max-w-xs">
+                    <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                      value={search}
+                      onChange={(event) => setSearch(event.target.value)}
+                      placeholder="Filtrar agregados..."
+                      className="pl-8 pr-8"
+                    />
+                    {search ? (
+                      <button
+                        type="button"
+                        aria-label="Limpiar filtro"
+                        onClick={() => setSearch('')}
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                      >
+                        <X className="size-4" />
+                      </button>
+                    ) : null}
+                  </div>
+                ) : null}
                 {!isEditing ? (
                   <Button
                     type="button"
                     variant="outline"
-                    className="w-full shrink-0 sm:w-auto"
+                    aria-label="Importar actividad"
+                    className="shrink-0"
                     onClick={() => setImportModalOpen(true)}
                   >
-                    Importar actividad
+                    <Download className="size-4" />
+                    <span className="hidden sm:inline">Importar actividad</span>
                   </Button>
                 ) : null}
               </div>
-
-              {formik.values.products.length > 0 ? (
-                <div className="relative w-full sm:max-w-xs">
-                  <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-                  <Input
-                    value={search}
-                    onChange={(event) => setSearch(event.target.value)}
-                    placeholder="Filtrar productos agregados..."
-                    className="pl-8 pr-8"
-                  />
-                  {search ? (
-                    <button
-                      type="button"
-                      aria-label="Limpiar filtro"
-                      onClick={() => setSearch('')}
-                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                    >
-                      <X className="size-4" />
-                    </button>
-                  ) : null}
-                </div>
-              ) : null}
 
               <div className="-mx-1 min-h-0 flex-1 overflow-y-auto p-1 md:mx-0 md:flex-none md:overflow-visible md:p-0">
               {isLoadingLines ? (
@@ -541,19 +576,17 @@ export function ActivityFormModal({
                               >
                                 Cantidad
                               </Label>
-                              <Input
+                              <QtyStepper
                                 id={`qty-mobile-${row.productId}`}
-                                type="number"
-                                step="1"
-                                min="1"
+                                min={1}
                                 max={row.maxQty}
                                 value={row.initialQty}
-                                onChange={(event) =>
-                                  handleQtyChange(index, event.target.value)
+                                onChange={(value) =>
+                                  handleQtyChange(index, value)
                                 }
                                 onBlur={() => handleQtyBlur(row)}
-                                aria-invalid={qtyError !== undefined}
-                                className="ml-auto w-20 px-1.5 text-right"
+                                invalid={qtyError !== undefined}
+                                className="ml-auto w-24"
                               />
 
                               <span className="text-muted-foreground">
@@ -608,19 +641,6 @@ export function ActivityFormModal({
             </div>
           </div>
 
-          <div className="mt-6 flex justify-end gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              disabled={isSaving}
-              onClick={handleRequestClose}
-            >
-              Cancelar
-            </Button>
-            <Button type="submit" disabled={isSaving || isLoadingLines}>
-              {isEditing ? 'Guardar cambios' : 'Registrar'}
-            </Button>
-          </div>
         </form>
       </CenterMorphModalContent>
 

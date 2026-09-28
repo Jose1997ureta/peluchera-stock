@@ -26,6 +26,7 @@ import {
   type ActivityFillLineFormValues,
 } from '../schemas/activity.schema'
 import { ActivityProductThumbnail } from './ActivityProductThumbnail'
+import { QtyStepper } from './QtyStepper'
 
 const ROW_HEIGHT = 56
 const HEADER_HEIGHT = 44
@@ -262,19 +263,15 @@ export function ActivityFillModal({
             <Label htmlFor={`sold-${row.productId}`} className="sr-only">
               Cantidad real
             </Label>
-            <Input
+            <QtyStepper
               id={`sold-${row.productId}`}
-              type="number"
-              step="1"
-              min="0"
+              min={0}
               max={row.initialQty}
               value={row.soldQty}
-              onChange={(event) =>
-                handleSoldQtyChange(index, event.target.value)
-              }
+              onChange={(value) => handleSoldQtyChange(index, value)}
               onBlur={() => handleSoldQtyBlur(row)}
-              aria-invalid={qtyError !== undefined}
-              className="w-16 px-1.5"
+              invalid={qtyError !== undefined}
+              className="ml-auto w-20"
             />
           </>
         )
@@ -363,6 +360,25 @@ export function ActivityFillModal({
                   )}
                 />
               </div>
+
+              <div className="flex gap-2 pt-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="flex-1"
+                  disabled={formik.isSubmitting}
+                  onClick={handleRequestClose}
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  type="submit"
+                  className="flex-1"
+                  disabled={formik.isSubmitting || isLoadingLines}
+                >
+                  Cerrar actividad
+                </Button>
+              </div>
             </div>
 
             <div className="flex min-h-0 flex-1 flex-col gap-2 md:col-span-5 md:flex-none">
@@ -444,19 +460,17 @@ export function ActivityFillModal({
                               >
                                 Cantidad real
                               </Label>
-                              <Input
+                              <QtyStepper
                                 id={`sold-mobile-${row.productId}`}
-                                type="number"
-                                step="1"
-                                min="0"
+                                min={0}
                                 max={row.initialQty}
                                 value={row.soldQty}
-                                onChange={(event) =>
-                                  handleSoldQtyChange(index, event.target.value)
+                                onChange={(value) =>
+                                  handleSoldQtyChange(index, value)
                                 }
                                 onBlur={() => handleSoldQtyBlur(row)}
-                                aria-invalid={qtyError !== undefined}
-                                className="ml-auto w-20 px-1.5 text-right"
+                                invalid={qtyError !== undefined}
+                                className="ml-auto w-24"
                               />
                             </div>
                           </CardContent>
@@ -520,23 +534,6 @@ export function ActivityFillModal({
               ) : null}
               </div>
             </div>
-          </div>
-
-          <div className="mt-6 flex justify-end gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              disabled={formik.isSubmitting}
-              onClick={handleRequestClose}
-            >
-              Cancelar
-            </Button>
-            <Button
-              type="submit"
-              disabled={formik.isSubmitting || isLoadingLines}
-            >
-              Cerrar actividad
-            </Button>
           </div>
         </form>
       </CenterMorphModalContent>

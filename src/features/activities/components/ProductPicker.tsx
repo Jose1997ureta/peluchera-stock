@@ -9,11 +9,12 @@ import { useActiveProductsForPicker } from '../hooks/useActiveProductsForPicker'
 import { ActivityProductThumbnail } from './ActivityProductThumbnail'
 
 export interface ProductPickerProps {
-  excludeProductIds: string[]
+  /** Productos que ya están en la lista: se siguen mostrando y al elegirlos se suma 1 a su cantidad. */
+  selectedProductIds: string[]
   onSelect: (product: Product) => void
 }
 
-export function ProductPicker({ excludeProductIds, onSelect }: ProductPickerProps) {
+export function ProductPicker({ selectedProductIds, onSelect }: ProductPickerProps) {
   const [search, setSearch] = useState('')
   const [open, setOpen] = useState(false)
   const debouncedSearch = useDebouncedValue(search, 250)
@@ -31,7 +32,7 @@ export function ProductPicker({ excludeProductIds, onSelect }: ProductPickerProp
   }, [])
 
   const { data } = useActiveProductsForPicker(debouncedSearch)
-  const results = (data ?? []).filter((product) => !excludeProductIds.includes(product.id))
+  const results = data ?? []
 
   return (
     <Popover
@@ -71,26 +72,42 @@ export function ProductPicker({ excludeProductIds, onSelect }: ProductPickerProp
         style={triggerWidth ? { width: triggerWidth } : undefined}
       >
         <div className="max-h-64 overflow-y-auto p-1.5">
-          {results.map((product) => (
-            <button
-              key={product.id}
-              type="button"
-              onClick={() => {
-                onSelect(product)
-                setSearch('')
-                setOpen(false)
-              }}
-              className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-sm hover:bg-muted"
-            >
-              <ActivityProductThumbnail imageUrl={product.imageUrl} name={product.name} />
-              <span className="flex min-w-0 flex-col gap-0.5">
-                <span className="truncate font-medium text-foreground">{product.name}</span>
-                <span className="text-xs text-muted-foreground">
-                  {formatCurrency(product.price)} · Stock disponible: {product.stock}
+          {results.map((product) => {
+            const isSelected = selectedProductIds.includes(product.id)
+            const isOutOfStock = product.stock <= 0
+            // Sin stock se muestra igual, pero solo se puede elegir si ya está en la lista
+            // (en edición su máximo incluye lo ya reservado por esa línea).
+            const isDisabled = isOutOfStock && !isSelected
+            return (
+              <button
+                key={product.id}
+                type="button"
+                disabled={isDisabled}
+                onClick={() => {
+                  onSelect(product)
+                  setSearch('')
+                  setOpen(false)
+                }}
+                className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-sm hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-transparent"
+              >
+                <ActivityProductThumbnail imageUrl={product.imageUrl} name={product.name} />
+                <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                  <span className="truncate font-medium text-foreground">{product.name}</span>
+                  <span className="text-xs text-muted-foreground">
+                    {formatCurrency(product.price)} ·{' '}
+                    {isOutOfStock ? (
+                      <span className="text-destructive">Sin stock</span>
+                    ) : (
+                      `Stock disponible: ${product.stock}`
+                    )}
+                  </span>
                 </span>
-              </span>
-            </button>
-          ))}
+                {isSelected ? (
+                  <span className="shrink-0 text-xs text-muted-foreground">En la lista · +1</span>
+                ) : null}
+              </button>
+            )
+          })}
         </div>
       </PopoverContent>
     </Popover>
